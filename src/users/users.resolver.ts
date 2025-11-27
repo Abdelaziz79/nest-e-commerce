@@ -1,0 +1,176 @@
+// src/users/users.resolver.ts
+import { UseGuards } from '@nestjs/common';
+import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import {
+  AddAddressInput,
+  BanUserInput,
+  CreateUserInput,
+  UpdateAddressInput,
+  UpdateUserInput,
+  UpdateUserRoleInput,
+  UpdateUserStatusInput,
+  UsersFilterInput,
+} from './dto/user.input';
+import {
+  PaginatedUsersType,
+  UserAdminType,
+  UserProfileType,
+  UserType,
+} from './dto/user.types';
+import { UsersService } from './users.service';
+
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { User } from './schemas/user.schema';
+
+@Resolver(() => UserType)
+export class UsersResolver {
+  constructor(private readonly usersService: UsersService) {}
+
+  // Public Queries (no auth required)
+
+  @Query(() => UserType, { name: 'user' })
+  async getUser(@Args('id', { type: () => ID }) id: string) {
+    return this.usersService.findById(id);
+  }
+
+  // Protected Queries (require authentication)
+
+  @Query(() => UserProfileType, { name: 'me' })
+  @UseGuards(GqlAuthGuard)
+  async getMe(@CurrentUser() user: User) {
+    return this.usersService.findById(user._id.toString());
+  }
+
+  // Admin Queries
+
+  @Query(() => PaginatedUsersType, { name: 'users' })
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  async getAllUsers(
+    @Args('filters', { nullable: true }) filters?: UsersFilterInput,
+  ) {
+    return this.usersService.findAll(filters);
+  }
+
+  @Query(() => UserAdminType, { name: 'userAdmin' })
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  async getUserAdmin(@Args('id', { type: () => ID }) id: string) {
+    return this.usersService.findById(id);
+  }
+
+  // Public Mutations
+
+  @Mutation(() => UserProfileType)
+  async createUser(@Args('input') input: CreateUserInput) {
+    return this.usersService.create(input);
+  }
+
+  // Protected Mutations
+
+  @Mutation(() => UserProfileType)
+  @UseGuards(GqlAuthGuard)
+  async updateUser(
+    @CurrentUser() user: User,
+    @Args('input') input: UpdateUserInput,
+  ) {
+    return this.usersService.update(user._id.toString(), input);
+  }
+
+  @Mutation(() => UserProfileType)
+  @UseGuards(GqlAuthGuard)
+  async addAddress(
+    @CurrentUser() user: User,
+    @Args('input') input: AddAddressInput,
+  ) {
+    return this.usersService.addAddress(user._id.toString(), input);
+  }
+
+  @Mutation(() => UserProfileType)
+  @UseGuards(GqlAuthGuard)
+  async updateAddress(
+    @CurrentUser() user: User,
+    @Args('addressId', { type: () => ID }) addressId: string,
+    @Args('input') input: UpdateAddressInput,
+  ) {
+    return this.usersService.updateAddress(
+      user._id.toString(),
+      addressId,
+      input,
+    );
+  }
+
+  @Mutation(() => UserProfileType)
+  @UseGuards(GqlAuthGuard)
+  async deleteAddress(
+    @CurrentUser() user: User,
+    @Args('addressId', { type: () => ID }) addressId: string,
+  ) {
+    return this.usersService.deleteAddress(user._id.toString(), addressId);
+  }
+
+  @Mutation(() => UserProfileType)
+  @UseGuards(GqlAuthGuard)
+  async setDefaultAddress(
+    @CurrentUser() user: User,
+    @Args('addressId', { type: () => ID }) addressId: string,
+  ) {
+    return this.usersService.setDefaultAddress(user._id.toString(), addressId);
+  }
+
+  @Mutation(() => UserProfileType)
+  @UseGuards(GqlAuthGuard)
+  async deleteUser(@CurrentUser() user: User) {
+    return this.usersService.delete(user._id.toString());
+  }
+
+  // Admin Mutations
+
+  @Mutation(() => UserAdminType)
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  async updateUserRole(@Args('input') input: UpdateUserRoleInput) {
+    return this.usersService.updateRole(input);
+  }
+
+  @Mutation(() => UserAdminType)
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  async updateUserStatus(@Args('input') input: UpdateUserStatusInput) {
+    return this.usersService.updateStatus(input);
+  }
+
+  @Mutation(() => UserAdminType)
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  async banUser(
+    @CurrentUser() admin: User,
+    @Args('input') input: BanUserInput,
+  ) {
+    return this.usersService.banUser(input, admin._id.toString());
+  }
+
+  @Mutation(() => UserAdminType)
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  async unbanUser(@Args('userId', { type: () => ID }) userId: string) {
+    return this.usersService.unbanUser(userId);
+  }
+
+  // Super Admin only mutations (for updating other admins)
+
+  @Mutation(() => UserAdminType)
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  async promoteToSuperAdmin(
+    @Args('userId', { type: () => ID }) userId: string,
+  ) {
+    return this.usersService.updateRole({
+      userId,
+      role: 'super_admin' as any,
+    });
+  }
+}
