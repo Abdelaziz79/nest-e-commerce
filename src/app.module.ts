@@ -13,7 +13,7 @@ import { AuthModule } from './auth/auth.module';
       isGlobal: true,
     }),
     MongooseModule.forRoot(
-      process.env.MONGODB_URI || 'mongodb://localhost:27017/ecommerce',
+      process.env.MONGODB_URI || 'mongodb://localhost:27017/nest-e-commerce',
     ),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,

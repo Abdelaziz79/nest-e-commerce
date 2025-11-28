@@ -1,15 +1,7 @@
 // src/auth/dto/auth.types.ts
 import { Field, ObjectType } from '@nestjs/graphql';
 
-@ObjectType()
-export class AuthPayload {
-  @Field()
-  accessToken: string;
-
-  @Field(() => UserInfo)
-  user: UserInfo;
-}
-
+// Define UserInfo FIRST before it's used
 @ObjectType()
 export class UserInfo {
   @Field()
@@ -26,4 +18,14 @@ export class UserInfo {
 
   @Field()
   role: string;
+}
+
+// Now AuthPayload can reference UserInfo
+@ObjectType()
+export class AuthPayload {
+  @Field()
+  accessToken: string;
+
+  @Field(() => UserInfo)
+  user: UserInfo;
 }

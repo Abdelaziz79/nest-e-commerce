@@ -11,6 +11,17 @@ registerEnumType(UserStatus, {
   name: 'UserStatus',
 });
 
+// Define CoordinatesType FIRST before it's used
+@ObjectType()
+export class CoordinatesType {
+  @Field()
+  lat: number;
+
+  @Field()
+  lng: number;
+}
+
+// Now AddressType can reference CoordinatesType
 @ObjectType()
 export class AddressType {
   @Field(() => ID)
@@ -54,15 +65,6 @@ export class AddressType {
 
   @Field()
   updatedAt: Date;
-}
-
-@ObjectType()
-export class CoordinatesType {
-  @Field()
-  lat: number;
-
-  @Field()
-  lng: number;
 }
 
 // Public User Type (for other users to see)
