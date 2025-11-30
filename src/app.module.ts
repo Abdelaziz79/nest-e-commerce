@@ -1,25 +1,41 @@
-// src/app.module.ts
+import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
+import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
-import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ConfigModule } from '@nestjs/config';
-import { UsersModule } from './users/users.module';
+import { join } from 'path';
+import { AppConfigModule } from './app.config.module';
+import { AppConfigService } from './app.config.service';
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
+    AppConfigModule,
+    MongooseModule.forRootAsync({
+      imports: [AppConfigModule],
+      inject: [AppConfigService],
+      useFactory: (configService: AppConfigService) => ({
+        uri: configService.mongodbUri,
+        retryAttempts: 5,
+        retryDelay: 3000,
+      }),
     }),
-    MongooseModule.forRoot(
-      process.env.MONGODB_URI || 'mongodb://localhost:27017/nest-e-commerce',
-    ),
-    GraphQLModule.forRoot<ApolloDriverConfig>({
+    GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: true, // Auto-generate schema
-      playground: true, // Enable GraphQL Playground
-      context: ({ req, res }) => ({ req, res }), // Pass request to context
+      imports: [AppConfigModule],
+      inject: [AppConfigService],
+      useFactory: (configService: AppConfigService) => ({
+        autoSchemaFile: configService.isDevelopment
+          ? join(process.cwd(), 'src/schema.gql')
+          : true,
+
+        sortSchema: true,
+
+        playground: false,
+        plugins: [ApolloServerPluginLandingPageLocalDefault()],
+        context: ({ req, res }) => ({ req, res }),
+      }),
     }),
     UsersModule,
     AuthModule,

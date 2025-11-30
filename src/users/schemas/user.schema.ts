@@ -21,7 +21,7 @@ export enum UserStatus {
 
 @Schema()
 export class Address {
-  _id: string; // MongoDB will auto-generate this
+  _id: string;
 
   @Prop({ required: true })
   address: string;
@@ -42,7 +42,7 @@ export class Address {
   isDefault: boolean;
 
   @Prop()
-  label: string; // "Home", "Work", etc.
+  label: string;
 
   @Prop()
   recipientName: string;
@@ -51,7 +51,7 @@ export class Address {
   recipientPhone: string;
 
   @Prop()
-  instructions: string; // Delivery instructions
+  instructions: string;
 
   @Prop({ type: { lat: Number, lng: Number } })
   coordinates: {
@@ -76,13 +76,17 @@ export class User extends Document {
   @Prop({ required: true, trim: true })
   lastName: string;
 
-  @Prop({ unique: true, sparse: true, trim: true, lowercase: true })
+  // REMOVED: unique: true, sparse: true from @Prop decorator
+  // These are now only defined in schema.index() below
+  @Prop({ trim: true, lowercase: true })
   username: string;
 
   @Prop()
   displayName: string;
 
-  @Prop({ required: true, unique: true, lowercase: true, trim: true })
+  // REMOVED: unique: true from @Prop decorator
+  // This is now only defined in schema.index() below
+  @Prop({ required: true, lowercase: true, trim: true })
   email: string;
 
   @Prop({ required: true, select: false })
@@ -101,7 +105,7 @@ export class User extends Document {
   bannedAt: Date;
 
   @Prop({ type: String })
-  bannedBy: string; // User ID of admin who banned
+  bannedBy: string;
 
   @Prop()
   avatar: string;
@@ -190,9 +194,9 @@ UserSchema.virtual('fullName').get(function (this: User) {
 UserSchema.set('toJSON', { virtuals: true });
 UserSchema.set('toObject', { virtuals: true });
 
-// Indexes for better query performance
-UserSchema.index({ email: 1 });
-UserSchema.index({ username: 1 });
+// Define indexes here ONLY (removed from @Prop decorators above)
+UserSchema.index({ email: 1 }, { unique: true });
+UserSchema.index({ username: 1 }, { unique: true, sparse: true });
 UserSchema.index({ phone: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ status: 1 });

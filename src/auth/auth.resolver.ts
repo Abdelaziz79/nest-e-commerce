@@ -10,7 +10,7 @@ import { GqlAuthGuard } from './guards/gql-auth.guard';
 
 @Resolver()
 export class AuthResolver {
-  constructor(private authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Mutation(() => AuthPayload)
   async login(@Args('input') input: LoginInput) {

@@ -1,0 +1,264 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+input AddAddressInput {
+  address: AddressInput!
+}
+
+input AddressInput {
+  address: String!
+  city: String!
+  coordinates: CoordinatesInput
+  country: String!
+  instructions: String
+  isDefault: Boolean
+  label: String
+  phoneNumber: String!
+  postalCode: String!
+  recipientName: String
+  recipientPhone: String
+}
+
+type AddressType {
+  _id: ID!
+  address: String!
+  city: String!
+  coordinates: CoordinatesType
+  country: String!
+  createdAt: DateTime!
+  instructions: String
+  isDefault: Boolean!
+  label: String
+  phoneNumber: String!
+  postalCode: String!
+  recipientName: String
+  recipientPhone: String
+  updatedAt: DateTime!
+}
+
+type AuthPayload {
+  accessToken: String!
+  user: UserInfo!
+}
+
+input BanUserInput {
+  reason: String!
+  userId: String!
+}
+
+input CoordinatesInput {
+  lat: Float!
+  lng: Float!
+}
+
+type CoordinatesType {
+  lat: Float!
+  lng: Float!
+}
+
+input CreateUserInput {
+  avatar: String
+  dateOfBirth: DateTime
+  displayName: String
+  email: String!
+  firstName: String!
+  gender: String
+  lastName: String!
+  newsletter: Boolean
+  password: String!
+  phone: String
+  preferredCurrency: String
+  preferredLanguage: String
+  role: UserRole
+  username: String
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+type Mutation {
+  addAddress(input: AddAddressInput!): UserProfileType!
+  banUser(input: BanUserInput!): UserAdminType!
+  createUser(input: CreateUserInput!): UserProfileType!
+  deleteAddress(addressId: ID!): UserProfileType!
+  deleteUser: UserProfileType!
+  login(input: LoginInput!): AuthPayload!
+  promoteToSuperAdmin(userId: ID!): UserAdminType!
+  register(input: RegisterInput!): AuthPayload!
+  setDefaultAddress(addressId: ID!): UserProfileType!
+  unbanUser(userId: ID!): UserAdminType!
+  updateAddress(addressId: ID!, input: UpdateAddressInput!): UserProfileType!
+  updateUser(input: UpdateUserInput!): UserProfileType!
+  updateUserRole(input: UpdateUserRoleInput!): UserAdminType!
+  updateUserStatus(input: UpdateUserStatusInput!): UserAdminType!
+}
+
+type PaginatedUsersType {
+  limit: Float!
+  page: Float!
+  total: Float!
+  totalPages: Float!
+  users: [UserAdminType!]!
+}
+
+type Query {
+  me: UserProfileType!
+  user(id: ID!): UserType!
+  userAdmin(id: ID!): UserAdminType!
+  users(filters: UsersFilterInput): PaginatedUsersType!
+  whoAmI: UserInfo!
+}
+
+input RegisterInput {
+  email: String!
+  firstName: String!
+  lastName: String!
+  password: String!
+}
+
+input UpdateAddressInput {
+  address: AddressInput!
+  addressId: String!
+}
+
+input UpdateUserInput {
+  avatar: String
+  dateOfBirth: DateTime
+  displayName: String
+  firstName: String
+  gender: String
+  lastName: String
+  newsletter: Boolean
+  phone: String
+  preferredCurrency: String
+  preferredLanguage: String
+  username: String
+}
+
+input UpdateUserRoleInput {
+  role: UserRole!
+  userId: String!
+}
+
+input UpdateUserStatusInput {
+  status: UserStatus!
+  userId: String!
+}
+
+type UserAdminType {
+  _id: ID!
+  addresses: [AddressType!]!
+  avatar: String
+  banReason: String
+  bannedAt: DateTime
+  bannedBy: String
+  createdAt: DateTime!
+  dateOfBirth: DateTime
+  displayName: String
+  email: String!
+  firstName: String!
+  fullName: String!
+  gender: String
+  isActive: Boolean!
+  isEmailVerified: Boolean!
+  lastLogin: DateTime
+  lastName: String!
+  lockUntil: DateTime
+  loginAttempts: Float!
+  newsletter: Boolean!
+  phone: String
+  phoneVerified: Boolean!
+  preferredCurrency: String!
+  preferredLanguage: String!
+  privacyPolicyAcceptedAt: DateTime
+  role: UserRole!
+  status: UserStatus!
+  termsAcceptedAt: DateTime
+  twoFactorEnabled: Boolean!
+  updatedAt: DateTime!
+  username: String
+}
+
+type UserInfo {
+  email: String!
+  firstName: String!
+  id: String!
+  lastName: String!
+  role: String!
+}
+
+type UserProfileType {
+  _id: ID!
+  addresses: [AddressType!]!
+  avatar: String
+  createdAt: DateTime!
+  dateOfBirth: DateTime
+  displayName: String
+  email: String!
+  firstName: String!
+  fullName: String!
+  gender: String
+  isActive: Boolean!
+  isEmailVerified: Boolean!
+  lastLogin: DateTime
+  lastName: String!
+  newsletter: Boolean!
+  phone: String
+  phoneVerified: Boolean!
+  preferredCurrency: String!
+  preferredLanguage: String!
+  privacyPolicyAcceptedAt: DateTime
+  role: UserRole!
+  status: UserStatus!
+  termsAcceptedAt: DateTime
+  twoFactorEnabled: Boolean!
+  updatedAt: DateTime!
+  username: String
+}
+
+enum UserRole {
+  ADMIN
+  CUSTOMER
+  MODERATOR
+  SUPER_ADMIN
+  SUPPORT
+  VENDOR
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+  INACTIVE
+  PENDING
+  SUSPENDED
+}
+
+type UserType {
+  _id: ID!
+  avatar: String
+  createdAt: DateTime!
+  displayName: String
+  firstName: String!
+  fullName: String!
+  lastName: String!
+  role: UserRole!
+  updatedAt: DateTime!
+  username: String
+}
+
+input UsersFilterInput {
+  isEmailVerified: Boolean
+  limit: Float
+  page: Float
+  role: UserRole
+  search: String
+  status: UserStatus
+}

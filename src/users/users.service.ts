@@ -21,7 +21,9 @@ import { User, UserStatus } from './schemas/user.schema';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<User>) {}
+  constructor(
+    @InjectModel(User.name) private readonly userModel: Model<User>,
+  ) {}
 
   // Create a new user
   async create(createUserInput: CreateUserInput): Promise<User> {
