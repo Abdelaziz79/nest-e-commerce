@@ -4,7 +4,7 @@ import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { User } from '../users/schemas/user.schema';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { LoginInput, RegisterInput } from './dto/auth.input';
+import { LoginInput, RefreshTokenInput, RegisterInput } from './dto/auth.input';
 import { AuthPayload, UserInfo } from './dto/auth.types';
 import { GqlAuthGuard } from './guards/gql-auth.guard';
 
@@ -19,8 +19,20 @@ export class AuthResolver {
 
   @Mutation(() => AuthPayload)
   async register(@Args('input') input: RegisterInput) {
-    const user = await this.authService.register(input);
-    return this.authService.generateToken(user);
+    return this.authService.register(input);
+  }
+
+  @Mutation(() => AuthPayload)
+  async refreshToken(@Args('input') input: RefreshTokenInput) {
+    return this.authService.refreshTokens(input.token);
+  }
+
+  @Mutation(() => Boolean)
+  async logout(
+    @Args('userId') userId: string,
+    @Args('refreshToken') refreshToken: string,
+  ) {
+    return this.authService.logout(userId, refreshToken);
   }
 
   @Query(() => UserInfo)

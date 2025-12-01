@@ -39,6 +39,7 @@ type AddressType {
 
 type AuthPayload {
   accessToken: String!
+  refreshToken: String!
   user: UserInfo!
 }
 
@@ -91,7 +92,9 @@ type Mutation {
   deleteAddress(addressId: ID!): UserProfileType!
   deleteUser: UserProfileType!
   login(input: LoginInput!): AuthPayload!
+  logout(refreshToken: String!, userId: String!): Boolean!
   promoteToSuperAdmin(userId: ID!): UserAdminType!
+  refreshToken(input: RefreshTokenInput!): AuthPayload!
   register(input: RegisterInput!): AuthPayload!
   setDefaultAddress(addressId: ID!): UserProfileType!
   unbanUser(userId: ID!): UserAdminType!
@@ -115,6 +118,10 @@ type Query {
   userAdmin(id: ID!): UserAdminType!
   users(filters: UsersFilterInput): PaginatedUsersType!
   whoAmI: UserInfo!
+}
+
+input RefreshTokenInput {
+  token: String!
 }
 
 input RegisterInput {

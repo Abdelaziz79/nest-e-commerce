@@ -32,3 +32,10 @@ export class RegisterInput {
   @MinLength(8)
   password: string;
 }
+
+@InputType()
+export class RefreshTokenInput {
+  @Field()
+  @IsString()
+  token: string;
+}

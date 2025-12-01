@@ -1,5 +1,6 @@
 // src/users/schemas/user.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import * as bcrypt from 'bcrypt';
 import { Document } from 'mongoose';
 
 export enum UserRole {
@@ -76,16 +77,12 @@ export class User extends Document {
   @Prop({ required: true, trim: true })
   lastName: string;
 
-  // REMOVED: unique: true, sparse: true from @Prop decorator
-  // These are now only defined in schema.index() below
   @Prop({ trim: true, lowercase: true })
   username: string;
 
   @Prop()
   displayName: string;
 
-  // REMOVED: unique: true from @Prop decorator
-  // This is now only defined in schema.index() below
   @Prop({ required: true, lowercase: true, trim: true })
   email: string;
 
@@ -181,6 +178,9 @@ export class User extends Document {
 
   @Prop()
   privacyPolicyAcceptedAt: Date;
+
+  // TypeScript Definition
+  validatePassword: (password: string) => Promise<boolean>;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -190,11 +190,18 @@ UserSchema.virtual('fullName').get(function (this: User) {
   return `${this.firstName} ${this.lastName}`;
 });
 
+// Runtime Method Implementation
+UserSchema.methods.validatePassword = async function (
+  password: string,
+): Promise<boolean> {
+  return bcrypt.compare(password, this.password);
+};
+
 // Ensure virtuals are included in JSON
 UserSchema.set('toJSON', { virtuals: true });
 UserSchema.set('toObject', { virtuals: true });
 
-// Define indexes here ONLY (removed from @Prop decorators above)
+// Define indexes
 UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index({ username: 1 }, { unique: true, sparse: true });
 UserSchema.index({ phone: 1 });
