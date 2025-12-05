@@ -1,20 +1,37 @@
+// src/app.module.ts
 import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { GraphQLModule } from '@nestjs/graphql';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { redisStore } from 'cache-manager-redis-yet';
+import { GraphQLError } from 'graphql';
+import { getComplexity, simpleEstimator } from 'graphql-query-complexity';
 import { join } from 'path';
 import { AppConfigModule } from './app.config.module';
 import { AppConfigService } from './app.config.service';
 import { AuthModule } from './auth/auth.module';
+import { GqlThrottlerGuard } from './common/guards/gql-throttler.guard';
 import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
     AppConfigModule,
-    // 1. Setup Redis Cache
+    // 1. Throttler (Rate Limiting)
+    ThrottlerModule.forRootAsync({
+      imports: [AppConfigModule],
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService) => [
+        {
+          ttl: config.throttleTtl,
+          limit: config.throttleLimit,
+        },
+      ],
+    }),
+    // 2. Redis Caching
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [AppConfigModule],
@@ -26,6 +43,7 @@ import { UsersModule } from './users/users.module';
         }),
       }),
     }),
+    // 3. Database
     MongooseModule.forRootAsync({
       imports: [AppConfigModule],
       inject: [AppConfigService],
@@ -35,6 +53,7 @@ import { UsersModule } from './users/users.module';
         retryDelay: 3000,
       }),
     }),
+    // 4. GraphQL + Complexity
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
       imports: [AppConfigModule],
@@ -45,12 +64,44 @@ import { UsersModule } from './users/users.module';
           : true,
         sortSchema: true,
         playground: false,
-        plugins: [ApolloServerPluginLandingPageLocalDefault()],
+        plugins: [
+          ApolloServerPluginLandingPageLocalDefault(),
+          // Query Complexity Plugin
+          {
+            async requestDidStart() {
+              return {
+                async didResolveOperation({ request, document, schema }) {
+                  const complexity = getComplexity({
+                    schema,
+                    operationName: request.operationName,
+                    query: document,
+                    variables: request.variables,
+                    estimators: [simpleEstimator({ defaultComplexity: 1 })],
+                  });
+
+                  // Allow max 50 points of complexity per query
+                  if (complexity > 50) {
+                    throw new GraphQLError(
+                      `Query is too complex: ${complexity}. Maximum allowed is 50`,
+                    );
+                  }
+                },
+              };
+            },
+          },
+        ],
         context: ({ req, res }) => ({ req, res }),
       }),
     }),
     UsersModule,
     AuthModule,
+  ],
+  providers: [
+    // 5. Register Global Throttler Guard
+    {
+      provide: APP_GUARD,
+      useClass: GqlThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

@@ -1,6 +1,7 @@
 // src/users/users.resolver.ts
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import {
   AddAddressInput,
   BanUserInput,
@@ -29,14 +30,18 @@ import { User } from './schemas/user.schema';
 export class UsersResolver {
   constructor(private readonly usersService: UsersService) {}
 
-  // Public Queries (no auth required)
+  // ==========================================
+  // Public Queries
+  // ==========================================
 
   @Query(() => UserType, { name: 'user' })
   async getUser(@Args('id', { type: () => ID }) id: string) {
     return this.usersService.findById(id);
   }
 
-  // Protected Queries (require authentication)
+  // ==========================================
+  // Protected Queries
+  // ==========================================
 
   @Query(() => UserProfileType, { name: 'me' })
   @UseGuards(GqlAuthGuard)
@@ -44,8 +49,11 @@ export class UsersResolver {
     return this.usersService.findById(user._id.toString());
   }
 
-  // Admin Queries
+  // ==========================================
+  // Admin Queries (Skip Throttling)
+  // ==========================================
 
+  @SkipThrottle()
   @Query(() => PaginatedUsersType, { name: 'users' })
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
@@ -55,6 +63,7 @@ export class UsersResolver {
     return this.usersService.findAll(filters);
   }
 
+  @SkipThrottle()
   @Query(() => UserAdminType, { name: 'userAdmin' })
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
@@ -62,14 +71,19 @@ export class UsersResolver {
     return this.usersService.findById(id);
   }
 
-  // Public Mutations
+  // ==========================================
+  // Public Mutations (Strict Throttling)
+  // ==========================================
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Mutation(() => UserProfileType)
   async createUser(@Args('input') input: CreateUserInput) {
     return this.usersService.create(input);
   }
 
+  // ==========================================
   // Protected Mutations
+  // ==========================================
 
   @Mutation(() => UserProfileType)
   @UseGuards(GqlAuthGuard)
@@ -127,8 +141,11 @@ export class UsersResolver {
     return this.usersService.delete(user._id.toString());
   }
 
-  // Admin Mutations
+  // ==========================================
+  // Admin Mutations (Skip Throttling)
+  // ==========================================
 
+  @SkipThrottle()
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
@@ -136,6 +153,7 @@ export class UsersResolver {
     return this.usersService.updateRole(input);
   }
 
+  @SkipThrottle()
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
@@ -143,6 +161,7 @@ export class UsersResolver {
     return this.usersService.updateStatus(input);
   }
 
+  @SkipThrottle()
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
@@ -153,6 +172,7 @@ export class UsersResolver {
     return this.usersService.banUser(input, admin._id.toString());
   }
 
+  @SkipThrottle()
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
@@ -160,8 +180,9 @@ export class UsersResolver {
     return this.usersService.unbanUser(userId);
   }
 
-  // Super Admin only mutations (for updating other admins)
+  // Super Admin only mutations
 
+  @SkipThrottle()
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('super_admin')

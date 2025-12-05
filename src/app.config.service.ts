@@ -54,4 +54,12 @@ export class AppConfigService {
   get cacheTtl() {
     return this.configService.get('redis.ttl', { infer: true });
   }
+
+  get throttleTtl() {
+    return this.configService.get('throttle.ttl', { infer: true }) as number;
+  }
+
+  get throttleLimit() {
+    return this.configService.get('throttle.limit', { infer: true }) as number;
+  }
 }

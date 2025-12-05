@@ -19,6 +19,10 @@ const configuration = () => ({
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'default_refresh_secret',
     refreshExpiration: process.env.JWT_REFRESH_EXPIRATION || '7d', // Refresh Token (Long)
   },
+  throttle: {
+    ttl: parseInt(process.env.THROTTLE_TTL || '60000', 10), // 60 seconds
+    limit: parseInt(process.env.THROTTLE_LIMIT || '20', 10), // 20 requests per TTL
+  },
 });
 export default configuration;
 

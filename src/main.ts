@@ -1,15 +1,17 @@
+// src/main.ts
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { AppConfigService } from './app.config.service';
 import { AppModule } from './app.module';
-import { AppConfigService } from './app.config.service'; // Import your service
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // 1. Get the Config Service from the app container
   const configService = app.get(AppConfigService);
 
-  // 2. Use configService for CORS
+  app.set('trust proxy', 1);
+
   app.enableCors({
     origin: configService.corsOrigin,
     credentials: true,
@@ -26,7 +28,6 @@ async function bootstrap() {
     }),
   );
 
-  // 3. Use configService for the Port
   const port = configService.port;
 
   await app.listen(port);
