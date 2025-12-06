@@ -62,4 +62,27 @@ export class AppConfigService {
   get throttleLimit() {
     return this.configService.get('throttle.limit', { infer: true }) as number;
   }
+  get googleClientId() {
+    return this.configService.get('oauth.google.clientId', { infer: true });
+  }
+  get googleClientSecret() {
+    return this.configService.get('oauth.google.clientSecret', { infer: true });
+  }
+  get googleCallbackUrl() {
+    return this.configService.get('oauth.google.callbackUrl', { infer: true });
+  }
+
+  get githubClientId() {
+    return this.configService.get('oauth.github.clientId', { infer: true });
+  }
+  get githubClientSecret() {
+    return this.configService.get('oauth.github.clientSecret', { infer: true });
+  }
+  get githubCallbackUrl() {
+    return this.configService.get('oauth.github.callbackUrl', { infer: true });
+  }
+
+  get frontendUrl() {
+    return this.configService.get('oauth.frontendUrl', { infer: true });
+  }
 }

@@ -1,0 +1,1086 @@
+{
+  "info": {
+    "name": "NestJS GraphQL Auth & Users API",
+    "description": "Complete test collection for NestJS GraphQL application with Auth, Users, OAuth, and Admin features",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "graphqlEndpoint",
+      "value": "http://localhost:5000/graphql",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "addressId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.register) {",
+                  "    var accessToken = jsonData.data.register.accessToken;",
+                  "    var refreshToken = jsonData.data.register.refreshToken;",
+                  "    var userId = jsonData.data.register.user.id;",
+                  "    ",
+                  "    if (accessToken) {",
+                  "        pm.environment.set(\"token\", accessToken);",
+                  "        console.log(\"✓ Access token stored\");",
+                  "    }",
+                  "    ",
+                  "    if (refreshToken) {",
+                  "        pm.environment.set(\"refreshToken\", refreshToken);",
+                  "        console.log(\"✓ Refresh token stored\");",
+                  "    }",
+                  "    ",
+                  "    if (userId) {",
+                  "        pm.environment.set(\"userId\", userId);",
+                  "        console.log(\"✓ User ID stored:\", userId);",
+                  "    }",
+                  "    ",
+                  "    pm.test(\"Registration successful\", function() {",
+                  "        pm.expect(accessToken).to.be.a('string');",
+                  "        pm.expect(refreshToken).to.be.a('string');",
+                  "        pm.expect(userId).to.be.a('string');",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error(\"❌ GraphQL errors:\", jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"password\": \"SecurePass123!\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.login) {",
+                  "    var accessToken = jsonData.data.login.accessToken;",
+                  "    var refreshToken = jsonData.data.login.refreshToken;",
+                  "    var userId = jsonData.data.login.user.id;",
+                  "    ",
+                  "    if (accessToken) {",
+                  "        pm.environment.set(\"token\", accessToken);",
+                  "        console.log(\"✓ Access token stored:\", accessToken.substring(0, 20) + \"...\");",
+                  "    }",
+                  "    ",
+                  "    if (refreshToken) {",
+                  "        pm.environment.set(\"refreshToken\", refreshToken);",
+                  "        console.log(\"✓ Refresh token stored\");",
+                  "    }",
+                  "    ",
+                  "    if (userId) {",
+                  "        pm.environment.set(\"userId\", userId);",
+                  "        console.log(\"✓ User ID stored:\", userId);",
+                  "    }",
+                  "    ",
+                  "    pm.test(\"Login successful\", function() {",
+                  "        pm.expect(accessToken).to.be.a('string');",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error(\"❌ GraphQL errors:\", jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Login($input: LoginInput!) {\n  login(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"john.doe@example.com\",\n    \"password\": \"SecurePass123!\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Who Am I",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query WhoAmI {\n  whoAmI {\n    id\n    email\n    firstName\n    lastName\n    role\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.refreshToken) {",
+                  "    var accessToken = jsonData.data.refreshToken.accessToken;",
+                  "    var refreshToken = jsonData.data.refreshToken.refreshToken;",
+                  "    ",
+                  "    if (accessToken) {",
+                  "        pm.environment.set(\"token\", accessToken);",
+                  "        console.log(\"✓ New access token stored\");",
+                  "    }",
+                  "    ",
+                  "    if (refreshToken) {",
+                  "        pm.environment.set(\"refreshToken\", refreshToken);",
+                  "        console.log(\"✓ New refresh token stored\");",
+                  "    }",
+                  "    ",
+                  "    pm.test(\"Token refresh successful\", function() {",
+                  "        pm.expect(accessToken).to.be.a('string');",
+                  "        pm.expect(refreshToken).to.be.a('string');",
+                  "    });",
+                  "} else {",
+                  "    console.error(\"❌ Refresh failed:\", jsonData);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RefreshToken($input: RefreshTokenInput!) {\n  refreshToken(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"token\": \"{{refreshToken}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Logout($userId: String!, $refreshToken: String!) {\n  logout(userId: $userId, refreshToken: $refreshToken)\n}",
+                "variables": "{\n  \"userId\": \"{{userId}}\",\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Request Password Reset",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RequestPasswordReset($input: RequestPasswordResetInput!) {\n  requestPasswordReset(input: $input)\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"john.doe@example.com\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation ResetPassword($input: ResetPasswordInput!) {\n  resetPassword(input: $input)\n}",
+                "variables": "{\n  \"input\": {\n    \"token\": \"your-reset-token-here\",\n    \"newPassword\": \"NewSecurePass123!\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Update User Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateUserRole($input: UpdateUserRoleInput!) {\n  updateUserRole(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"userId\": \"{{userId}}\",\n    \"role\": \"ADMIN\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Update User Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateUserStatus($input: UpdateUserStatusInput!) {\n  updateUserStatus(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    status\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"userId\": \"{{userId}}\",\n    \"status\": \"ACTIVE\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Ban User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation BanUser($input: BanUserInput!) {\n  banUser(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    status\n    banReason\n    bannedAt\n    bannedBy\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"userId\": \"{{userId}}\",\n    \"reason\": \"Violation of terms of service\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Unban User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UnbanUser($userId: ID!) {\n  unbanUser(userId: $userId) {\n    _id\n    firstName\n    lastName\n    email\n    status\n    banReason\n    bannedAt\n  }\n}",
+                "variables": "{\n  \"userId\": \"{{userId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Promote to Super Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation PromoteToSuperAdmin($userId: ID!) {\n  promoteToSuperAdmin(userId: $userId) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"userId\": \"{{userId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Testing - Rate Limiting",
+      "item": [
+        {
+          "name": "Test Login Rate Limit (5/min)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Login($input: LoginInput!) {\n  login(input: $input) {\n    accessToken\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"test@example.com\",\n    \"password\": \"WrongPassword123!\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Run this 6 times quickly to test rate limiting (should fail on 6th attempt)"
+          }
+        },
+        {
+          "name": "Test Registration Rate Limit (5/min)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    user {\n      id\n      email\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"email\": \"test{{$randomInt}}@example.com\",\n    \"password\": \"SecurePass123!\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Run this 6 times quickly to test rate limiting"
+          }
+        },
+        {
+          "name": "Test Password Reset Rate Limit (3/5min)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RequestPasswordReset($input: RequestPasswordResetInput!) {\n  requestPasswordReset(input: $input)\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"john.doe@example.com\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Run this 4 times quickly to test rate limiting (should fail on 4th attempt)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Testing - Validation",
+      "item": [
+        {
+          "name": "Invalid Email Format",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    user {\n      id\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"email\": \"invalid-email\",\n    \"password\": \"SecurePass123!\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Weak Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    user {\n      id\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"email\": \"test@example.com\",\n    \"password\": \"weak\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Invalid Phone Number",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateUser($input: CreateUserInput!) {\n  createUser(input: $input) {\n    _id\n    phone\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"email\": \"test2@example.com\",\n    \"password\": \"SecurePass123!\",\n    \"phone\": \"invalid-phone\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "GraphQL Playground",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Access GraphQL Playground in browser"
+          }
+        },
+        {
+          "name": "Introspection Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query IntrospectionQuery {\n  __schema {\n    queryType {\n      name\n    }\n    mutationType {\n      name\n    }\n    types {\n      name\n      kind\n    }\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "OAuth",
+      "item": [
+        {
+          "name": "Google OAuth - Initiate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google"]
+            },
+            "description": "Initiates Google OAuth flow. This will redirect to Google login page."
+          }
+        },
+        {
+          "name": "GitHub OAuth - Initiate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/github",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "github"]
+            },
+            "description": "Initiates GitHub OAuth flow. This will redirect to GitHub login page."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users - Public",
+      "item": [
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUser($id: ID!) {\n  user(id: $id) {\n    _id\n    firstName\n    lastName\n    fullName\n    username\n    displayName\n    avatar\n    role\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"id\": \"{{userId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Create User (Public Registration)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.createUser) {",
+                  "    var userId = jsonData.data.createUser._id;",
+                  "    ",
+                  "    if (userId) {",
+                  "        pm.environment.set(\"userId\", userId);",
+                  "        console.log(\"✓ User ID stored:\", userId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateUser($input: CreateUserInput!) {\n  createUser(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    status\n    isEmailVerified\n    createdAt\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Smith\",\n    \"username\": \"janesmith\",\n    \"email\": \"jane.smith@example.com\",\n    \"password\": \"SecurePass123!\",\n    \"phone\": \"+1234567890\",\n    \"dateOfBirth\": \"1990-05-15\",\n    \"gender\": \"female\",\n    \"newsletter\": true\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users - Protected",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetMe {\n  me {\n    _id\n    firstName\n    lastName\n    fullName\n    username\n    displayName\n    email\n    role\n    status\n    avatar\n    addresses {\n      _id\n      address\n      city\n      country\n      postalCode\n      phoneNumber\n      isDefault\n      label\n    }\n    isEmailVerified\n    phone\n    phoneVerified\n    lastLogin\n    isActive\n    preferredLanguage\n    preferredCurrency\n    dateOfBirth\n    gender\n    twoFactorEnabled\n    newsletter\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateUser($input: UpdateUserInput!) {\n  updateUser(input: $input) {\n    _id\n    firstName\n    lastName\n    username\n    displayName\n    phone\n    avatar\n    preferredLanguage\n    preferredCurrency\n    dateOfBirth\n    gender\n    newsletter\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe Updated\",\n    \"username\": \"johndoe_updated\",\n    \"displayName\": \"Johnny\",\n    \"phone\": \"+1987654321\",\n    \"preferredLanguage\": \"en\",\n    \"preferredCurrency\": \"USD\",\n    \"gender\": \"male\",\n    \"newsletter\": true\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete My Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DeleteUser {\n  deleteUser {\n    _id\n    email\n    isActive\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Addresses",
+      "item": [
+        {
+          "name": "Add Address",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.addAddress && jsonData.data.addAddress.addresses) {",
+                  "    var addresses = jsonData.data.addAddress.addresses;",
+                  "    if (addresses.length > 0) {",
+                  "        var addressId = addresses[addresses.length - 1]._id;",
+                  "        pm.environment.set(\"addressId\", addressId);",
+                  "        console.log(\"✓ Address ID stored:\", addressId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation AddAddress($input: AddAddressInput!) {\n  addAddress(input: $input) {\n    _id\n    addresses {\n      _id\n      address\n      city\n      country\n      postalCode\n      phoneNumber\n      isDefault\n      label\n      recipientName\n      recipientPhone\n      instructions\n      coordinates {\n        lat\n        lng\n      }\n      createdAt\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"address\": {\n      \"address\": \"123 Main Street\",\n      \"city\": \"New York\",\n      \"country\": \"USA\",\n      \"postalCode\": \"10001\",\n      \"phoneNumber\": \"+1234567890\",\n      \"isDefault\": true,\n      \"label\": \"Home\",\n      \"recipientName\": \"John Doe\",\n      \"recipientPhone\": \"+1234567890\",\n      \"instructions\": \"Ring the doorbell twice\",\n      \"coordinates\": {\n        \"lat\": 40.7128,\n        \"lng\": -74.006\n      }\n    }\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateAddress($addressId: ID!, $input: UpdateAddressInput!) {\n  updateAddress(addressId: $addressId, input: $input) {\n    _id\n    addresses {\n      _id\n      address\n      city\n      country\n      postalCode\n      phoneNumber\n      isDefault\n      label\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"addressId\": \"{{addressId}}\",\n  \"input\": {\n    \"addressId\": \"{{addressId}}\",\n    \"address\": {\n      \"address\": \"456 Updated Street\",\n      \"city\": \"Brooklyn\",\n      \"country\": \"USA\",\n      \"postalCode\": \"11201\",\n      \"phoneNumber\": \"+1234567890\",\n      \"isDefault\": false,\n      \"label\": \"Work\"\n    }\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Set Default Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation SetDefaultAddress($addressId: ID!) {\n  setDefaultAddress(addressId: $addressId) {\n    _id\n    addresses {\n      _id\n      address\n      isDefault\n    }\n  }\n}",
+                "variables": "{\n  \"addressId\": \"{{addressId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DeleteAddress($addressId: ID!) {\n  deleteAddress(addressId: $addressId) {\n    _id\n    addresses {\n      _id\n      address\n      city\n    }\n  }\n}",
+                "variables": "{\n  \"addressId\": \"{{addressId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Users Management",
+      "item": [
+        {
+          "name": "Get All Users (Paginated)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      role\n      status\n      isEmailVerified\n      isActive\n      lastLogin\n      createdAt\n    }\n    total\n    page\n    limit\n    totalPages\n  }\n}",
+                "variables": "{\n  \"filters\": {\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Users - Filtered by Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      role\n      status\n    }\n    total\n    page\n    limit\n    totalPages\n  }\n}",
+                "variables": "{\n  \"filters\": {\n    \"role\": \"CUSTOMER\",\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Users - Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      role\n    }\n    total\n  }\n}",
+                "variables": "{\n  \"filters\": {\n    \"search\": \"john\",\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        },
+        {
+          "name": "Get User Admin Details",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUserAdmin($id: ID!) {\n  userAdmin(id: $id) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    status\n    isEmailVerified\n    phone\n    phoneVerified\n    lastLogin\n    isActive\n    loginAttempts\n    lockUntil\n    banReason\n    bannedAt\n    bannedBy\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"id\": \"{{userId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

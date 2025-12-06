@@ -96,6 +96,8 @@ type Mutation {
   promoteToSuperAdmin(userId: ID!): UserAdminType!
   refreshToken(input: RefreshTokenInput!): AuthPayload!
   register(input: RegisterInput!): AuthPayload!
+  requestPasswordReset(input: RequestPasswordResetInput!): Boolean!
+  resetPassword(input: ResetPasswordInput!): Boolean!
   setDefaultAddress(addressId: ID!): UserProfileType!
   unbanUser(userId: ID!): UserAdminType!
   updateAddress(addressId: ID!, input: UpdateAddressInput!): UserProfileType!
@@ -129,6 +131,15 @@ input RegisterInput {
   firstName: String!
   lastName: String!
   password: String!
+}
+
+input RequestPasswordResetInput {
+  email: String!
+}
+
+input ResetPasswordInput {
+  newPassword: String!
+  token: String!
 }
 
 input UpdateAddressInput {

@@ -20,6 +20,13 @@ export enum UserStatus {
   SUSPENDED = 'suspended',
 }
 
+export interface RefreshTokenDocument {
+  token: string; // hashed
+  createdAt: Date;
+  expiresAt: Date;
+  deviceInfo?: string;
+}
+
 @Schema()
 export class Address {
   _id: string;
@@ -85,6 +92,12 @@ export class User extends Document {
 
   @Prop({ required: true, lowercase: true, trim: true })
   email: string;
+
+  @Prop()
+  googleId: string;
+
+  @Prop()
+  githubId: string;
 
   @Prop({ required: true, select: false })
   password: string;
@@ -161,8 +174,19 @@ export class User extends Document {
   @Prop({ select: false })
   twoFactorSecret: string;
 
-  @Prop({ type: [String], select: false })
-  refreshTokens: string[];
+  @Prop({
+    type: [
+      {
+        token: String,
+        createdAt: { type: Date, default: Date.now },
+        expiresAt: Date,
+        deviceInfo: String,
+      },
+    ],
+    select: false,
+    default: [],
+  })
+  refreshTokens: RefreshTokenDocument[];
 
   @Prop({ default: 0 })
   loginAttempts: number;
@@ -207,3 +231,44 @@ UserSchema.index({ username: 1 }, { unique: true, sparse: true });
 UserSchema.index({ phone: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ status: 1 });
+
+// Composite index for admin queries
+UserSchema.index({ role: 1, status: 1 });
+
+// Text index for search functionality
+UserSchema.index({
+  firstName: 'text',
+  lastName: 'text',
+  email: 'text',
+  username: 'text',
+});
+
+// Index for account security checks
+UserSchema.index(
+  { lockUntil: 1 },
+  {
+    sparse: true,
+    expireAfterSeconds: 0, // Auto-remove when lockUntil expires
+  },
+);
+
+// Index for social logins
+UserSchema.index({ googleId: 1 }, { unique: true, sparse: true });
+UserSchema.index({ githubId: 1 }, { unique: true, sparse: true });
+
+// TTL index to auto-delete verification tokens
+UserSchema.index(
+  { emailVerificationExpires: 1 },
+  {
+    expireAfterSeconds: 0,
+    sparse: true,
+  },
+);
+
+UserSchema.index(
+  { passwordResetExpires: 1 },
+  {
+    expireAfterSeconds: 0,
+    sparse: true,
+  },
+);

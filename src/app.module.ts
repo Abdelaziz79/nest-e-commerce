@@ -2,8 +2,8 @@
 import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { CacheModule } from '@nestjs/cache-manager';
-import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { GraphQLModule } from '@nestjs/graphql';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -14,7 +14,10 @@ import { join } from 'path';
 import { AppConfigModule } from './app.config.module';
 import { AppConfigService } from './app.config.service';
 import { AuthModule } from './auth/auth.module';
+import { GqlAllExceptionsFilter } from './common/filters/gql-exception.filter';
 import { GqlThrottlerGuard } from './common/guards/gql-throttler.guard';
+import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
+import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -102,6 +105,18 @@ import { UsersModule } from './users/users.module';
       provide: APP_GUARD,
       useClass: GqlThrottlerGuard,
     },
+    {
+      provide: APP_FILTER,
+      useClass: GqlAllExceptionsFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditLogInterceptor,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggerMiddleware).forRoutes('*');
+  }
+}

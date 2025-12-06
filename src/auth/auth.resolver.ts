@@ -5,7 +5,13 @@ import { Throttle } from '@nestjs/throttler';
 import { User } from '../users/schemas/user.schema';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { LoginInput, RefreshTokenInput, RegisterInput } from './dto/auth.input';
+import {
+  LoginInput,
+  RefreshTokenInput,
+  RegisterInput,
+  RequestPasswordResetInput,
+  ResetPasswordInput,
+} from './dto/auth.input';
 import { AuthPayload, UserInfo } from './dto/auth.types';
 import { GqlAuthGuard } from './guards/gql-auth.guard';
 
@@ -50,5 +56,17 @@ export class AuthResolver {
       lastName: user.lastName,
       role: user.role,
     };
+  }
+
+  @Throttle({ default: { limit: 3, ttl: 300000 } }) // 3 per 5 minutes
+  @Mutation(() => Boolean)
+  async requestPasswordReset(@Args('input') input: RequestPasswordResetInput) {
+    return this.authService.requestPasswordReset(input.email);
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 300000 } }) // 5 per 5 minutes
+  @Mutation(() => Boolean)
+  async resetPassword(@Args('input') input: ResetPasswordInput) {
+    return this.authService.resetPassword(input.token, input.newPassword);
   }
 }

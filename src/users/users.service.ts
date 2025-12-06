@@ -74,13 +74,73 @@ export class UsersService {
   }
 
   // =================================================================
-  // 2. TOKEN MANAGEMENT (Encapsulated)
+  // 2. SOCIAL LOGIN HELPERS
   // =================================================================
 
-  async addRefreshToken(userId: string, refreshToken: string): Promise<void> {
+  async findByGoogleId(googleId: string): Promise<User | null> {
+    return this.userModel.findOne({ googleId });
+  }
+
+  async findByGithubId(githubId: string): Promise<User | null> {
+    return this.userModel.findOne({ githubId });
+  }
+
+  async linkGoogleAccount(userId: string, googleId: string): Promise<User> {
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      { googleId, isEmailVerified: true },
+      { new: true },
+    );
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.cacheManager.del(`user:${userId}`);
+    return user;
+  }
+
+  async linkGithubAccount(userId: string, githubId: string): Promise<User> {
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      { githubId, isEmailVerified: true },
+      { new: true },
+    );
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.cacheManager.del(`user:${userId}`);
+    return user;
+  }
+
+  // =================================================================
+  // 3. TOKEN MANAGEMENT
+  // =================================================================
+
+  async addRefreshToken(
+    userId: string,
+    refreshToken: string,
+    expiresIn: string = '7d',
+  ): Promise<void> {
     const hashedToken = await bcrypt.hash(refreshToken, 10);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    // Remove expired tokens first
     await this.userModel.findByIdAndUpdate(userId, {
-      $push: { refreshTokens: hashedToken },
+      $pull: {
+        refreshTokens: {
+          expiresAt: { $lt: new Date() },
+        },
+      },
+    });
+
+    // Add new token
+    await this.userModel.findByIdAndUpdate(userId, {
+      $push: {
+        refreshTokens: {
+          token: hashedToken,
+          createdAt: new Date(),
+          expiresAt,
+          deviceInfo: 'web',
+        },
+      },
     });
   }
 
@@ -92,22 +152,33 @@ export class UsersService {
     const user = await this.userModel.findById(userId).select('+refreshTokens');
     if (!user) throw new UnauthorizedException('User not found');
 
+    user.refreshTokens = user.refreshTokens.filter(
+      (rt) => rt.expiresAt > new Date(),
+    );
+
     const tokenIndex = await this.findTokenIndex(
-      user.refreshTokens,
+      user.refreshTokens.map((rt) => rt.token),
       oldRefreshToken,
     );
 
     if (tokenIndex === -1) {
-      // Security: Reuse detection could trigger a wipe of all tokens here
+      // Security Alert: Reuse detected
+      user.refreshTokens = [];
+      await user.save();
       throw new UnauthorizedException('Invalid Refresh Token');
     }
 
-    // Remove old
     user.refreshTokens.splice(tokenIndex, 1);
 
-    // Add new
     const hashedNewToken = await bcrypt.hash(newRefreshToken, 10);
-    user.refreshTokens.push(hashedNewToken);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    user.refreshTokens.push({
+      token: hashedNewToken,
+      createdAt: new Date(),
+      expiresAt,
+    });
 
     return user.save();
   }
@@ -120,7 +191,7 @@ export class UsersService {
     if (!user) return;
 
     const tokenIndex = await this.findTokenIndex(
-      user.refreshTokens,
+      user.refreshTokens.map((rt) => rt.token),
       refreshToken,
     );
 
@@ -128,6 +199,12 @@ export class UsersService {
       user.refreshTokens.splice(tokenIndex, 1);
       await user.save();
     }
+  }
+
+  async revokeAllRefreshTokens(userId: string): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, {
+      refreshTokens: [],
+    });
   }
 
   private async findTokenIndex(
@@ -142,34 +219,32 @@ export class UsersService {
   }
 
   // =================================================================
-  // 3. READ OPERATIONS
+  // 4. READ OPERATIONS (Cached & Standard Mongoose)
   // =================================================================
 
-  // Cached
   async findById(id: string): Promise<User> {
     const cacheKey = `user:${id}`;
 
     // 1. Try Cache
     const cachedUser = await this.cacheManager.get<User>(cacheKey);
     if (cachedUser) {
-      console.log('Cache hit');
       return cachedUser;
     }
 
-    // 2. Try DB
-    const user = await this.userModel.findById(id);
+    // 2. Try DB (No .lean() needed, keeps virtuals)
+    const user = await this.userModel
+      .findById(id)
+      .select('-password -refreshTokens')
+      .exec();
+
     if (!user) throw new NotFoundException('User not found');
 
-    // 3. Save to Cache (60s TTL)
-    console.log('Cache miss. Caching user with key:', cacheKey);
-    await this.cacheManager.set(cacheKey, user, 60000);
+    // 3. Save to Cache
+    await this.cacheManager.set(cacheKey, user, 30000);
 
     return user;
   }
 
-  // NOTE: We generally do NOT cache list/search results because
-  // invalidating specific pages when a single user updates is complex
-  // and inefficient.
   async findAll(filters?: UsersFilterInput) {
     const {
       search,
@@ -179,25 +254,28 @@ export class UsersService {
       page = 1,
       limit = 10,
     } = filters || {};
+
+    const maxLimit = Math.min(limit, 100);
     const query: any = {};
 
     if (search) {
-      query.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { username: { $regex: search, $options: 'i' } },
-      ];
+      query.$text = { $search: search };
     }
 
     if (role) query.role = role;
     if (status) query.status = status;
     if (isEmailVerified !== undefined) query.isEmailVerified = isEmailVerified;
 
-    const skip = (page - 1) * limit;
+    const skip = (page - 1) * maxLimit;
 
+    // No .lean(), so virtuals work automatically
     const [users, total] = await Promise.all([
-      this.userModel.find(query).skip(skip).limit(limit).exec(),
+      this.userModel
+        .find(query)
+        .skip(skip)
+        .limit(maxLimit)
+        .select('-password -refreshTokens')
+        .exec(),
       this.userModel.countDocuments(query),
     ]);
 
@@ -205,13 +283,11 @@ export class UsersService {
       users,
       total,
       page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      limit: maxLimit,
+      totalPages: Math.ceil(total / maxLimit),
     };
   }
 
-  // NOTE: Never cache findByEmail as it returns sensitive password fields
-  // and is used for authentication logic requiring Mongoose Documents
   async findByEmail(email: string): Promise<User> {
     const user = await this.userModel.findOne({ email }).select('+password');
     if (!user) throw new NotFoundException('User not found');
@@ -219,7 +295,7 @@ export class UsersService {
   }
 
   // =================================================================
-  // 4. WRITE OPERATIONS (With Cache Invalidation)
+  // 5. WRITE OPERATIONS (With Cache Invalidation)
   // =================================================================
 
   async update(
@@ -243,9 +319,7 @@ export class UsersService {
     );
     if (!user) throw new NotFoundException('User not found');
 
-    // Invalidate Cache
     await this.cacheManager.del(`user:${userId}`);
-
     return user;
   }
 
@@ -257,14 +331,12 @@ export class UsersService {
     );
     if (!user) throw new NotFoundException('User not found');
 
-    // Invalidate Cache
     await this.cacheManager.del(`user:${userId}`);
-
     return user;
   }
 
   // =================================================================
-  // 5. ADMIN ACTIONS (With Cache Invalidation)
+  // 6. ADMIN ACTIONS
   // =================================================================
 
   async updateRole(updateRoleInput: UpdateUserRoleInput): Promise<User> {
@@ -274,10 +346,7 @@ export class UsersService {
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
-
-    // Invalidate Cache
     await this.cacheManager.del(`user:${updateRoleInput.userId}`);
-
     return user;
   }
 
@@ -288,10 +357,7 @@ export class UsersService {
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
-
-    // Invalidate Cache
     await this.cacheManager.del(`user:${updateStatusInput.userId}`);
-
     return user;
   }
 
@@ -307,10 +373,7 @@ export class UsersService {
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
-
-    // Invalidate Cache
     await this.cacheManager.del(`user:${banInput.userId}`);
-
     return user;
   }
 
@@ -326,15 +389,12 @@ export class UsersService {
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
-
-    // Invalidate Cache
     await this.cacheManager.del(`user:${userId}`);
-
     return user;
   }
 
   // =================================================================
-  // 6. ADDRESS MANAGEMENT (Atomic & Cached)
+  // 7. ADDRESS MANAGEMENT
   // =================================================================
 
   async addAddress(userId: string, addressInput: AddAddressInput) {
@@ -353,9 +413,7 @@ export class UsersService {
       { new: true },
     );
 
-    // Invalidate Cache
     await this.cacheManager.del(`user:${userId}`);
-
     return updatedUser;
   }
 
@@ -383,9 +441,7 @@ export class UsersService {
     );
     if (!user) throw new NotFoundException('User or address not found');
 
-    // Invalidate Cache
     await this.cacheManager.del(`user:${userId}`);
-
     return user;
   }
 
@@ -396,10 +452,7 @@ export class UsersService {
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
-
-    // Invalidate Cache
     await this.cacheManager.del(`user:${userId}`);
-
     return user;
   }
 
@@ -414,15 +467,12 @@ export class UsersService {
       { new: true },
     );
     if (!user) throw new NotFoundException('User or address not found');
-
-    // Invalidate Cache
     await this.cacheManager.del(`user:${userId}`);
-
     return user;
   }
 
   // =================================================================
-  // 7. LOGIN HELPERS
+  // 8. LOGIN HELPERS
   // =================================================================
 
   async updateLastLogin(userId: string): Promise<void> {
@@ -430,8 +480,6 @@ export class UsersService {
       lastLogin: new Date(),
       loginAttempts: 0,
     });
-    // Optional: Invalidate cache if you want 'lastLogin' to update instantly on the UI
-    // await this.cacheManager.del(`user:${userId}`);
   }
 
   async incrementLoginAttempts(email: string): Promise<void> {
@@ -456,5 +504,49 @@ export class UsersService {
       return false;
     }
     return false;
+  }
+
+  // =================================================================
+  // 9. RESET PASSWORD HELPERS (Optimized)
+  // =================================================================
+
+  async setPasswordResetToken(
+    userId: string,
+    hashedToken: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, {
+      passwordResetToken: hashedToken,
+      passwordResetExpires: expiresAt,
+    });
+  }
+
+  // ✅ New Method: Lookup specific user, checking if token is expired
+  async findByIdForPasswordReset(userId: string): Promise<User | null> {
+    const user = await this.userModel
+      .findById(userId)
+      .select('+passwordResetToken +passwordResetExpires');
+
+    if (!user) return null;
+
+    if (
+      !user.passwordResetToken ||
+      !user.passwordResetExpires ||
+      user.passwordResetExpires < new Date()
+    ) {
+      return null;
+    }
+
+    return user;
+  }
+
+  async updatePassword(userId: string, hashedPassword: string): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, {
+      password: hashedPassword,
+      passwordResetToken: null,
+      passwordResetExpires: null,
+    });
+
+    await this.cacheManager.del(`user:${userId}`);
   }
 }

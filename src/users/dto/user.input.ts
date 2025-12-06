@@ -3,12 +3,17 @@ import { Field, InputType } from '@nestjs/graphql';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDate,
   IsDateString,
   IsEmail,
   IsEnum,
+  IsNotEmpty,
   IsOptional,
+  IsPhoneNumber,
   IsString,
+  IsUrl,
   Matches,
+  MaxLength,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -83,32 +88,55 @@ export class AddressInput {
 export class CreateUserInput {
   @Field()
   @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(50)
+  @Matches(/^[a-zA-Z\s'-]+$/, {
+    message:
+      'First name can only contain letters, spaces, hyphens and apostrophes',
+  })
   firstName: string;
 
   @Field()
   @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(50)
+  @Matches(/^[a-zA-Z\s'-]+$/, {
+    message:
+      'Last name can only contain letters, spaces, hyphens and apostrophes',
+  })
   lastName: string;
 
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MinLength(3)
+  @MaxLength(30)
+  @Matches(/^[a-zA-Z0-9_-]+$/, {
+    message:
+      'Username can only contain letters, numbers, underscores and hyphens',
+  })
   username?: string;
 
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   displayName?: string;
 
   @Field()
-  @IsEmail()
+  @IsEmail({}, { message: 'Please provide a valid email address' })
+  @MaxLength(255)
   email: string;
 
   @Field()
   @IsString()
-  @MinLength(8)
-  @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
+  @MinLength(8, { message: 'Password must be at least 8 characters long' })
+  @MaxLength(128, { message: 'Password is too long' })
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, {
     message:
-      'Password must contain uppercase, lowercase, and number/special character',
+      'Password must contain at least one uppercase letter, one lowercase letter, one number and one special character (@$!%*?&)',
   })
   password: string;
 
@@ -119,32 +147,43 @@ export class CreateUserInput {
 
   @Field({ nullable: true })
   @IsOptional()
-  @IsString()
+  @IsPhoneNumber(undefined, { message: 'Please provide a valid phone number' })
   phone?: string;
 
   @Field({ nullable: true })
   @IsOptional()
-  @IsString()
+  @IsUrl({}, { message: 'Please provide a valid URL for avatar' })
+  @MaxLength(500)
   avatar?: string;
 
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MaxLength(10)
+  @Matches(/^[a-z]{2}$/, {
+    message: 'Language code must be 2 lowercase letters',
+  })
   preferredLanguage?: string;
 
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MaxLength(3)
+  @Matches(/^[A-Z]{3}$/, {
+    message: 'Currency code must be 3 uppercase letters',
+  })
   preferredCurrency?: string;
 
   @Field({ nullable: true })
   @IsOptional()
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   dateOfBirth?: Date;
 
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @IsEnum(['male', 'female', 'other', 'prefer_not_to_say'])
   gender?: string;
 
   @Field({ nullable: true })
@@ -197,7 +236,8 @@ export class UpdateUserInput {
 
   @Field({ nullable: true })
   @IsOptional()
-  @IsDateString()
+  @Type(() => Date)
+  @IsDate()
   dateOfBirth?: Date;
 
   @Field({ nullable: true })
@@ -293,4 +333,22 @@ export class UsersFilterInput {
   @Field({ nullable: true })
   @IsOptional()
   limit?: number;
+}
+
+@InputType()
+export class InternalCreateUserInput extends CreateUserInput {
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  isEmailVerified?: boolean;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  googleId?: string;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  githubId?: string;
 }

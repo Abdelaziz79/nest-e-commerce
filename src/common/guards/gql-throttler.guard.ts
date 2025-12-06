@@ -1,3 +1,5 @@
+// common/guards/gql-throttler.guard.ts
+
 import { ExecutionContext, Injectable } from '@nestjs/common';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { ThrottlerGuard } from '@nestjs/throttler';
@@ -5,11 +7,19 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 @Injectable()
 export class GqlThrottlerGuard extends ThrottlerGuard {
   getRequestResponse(context: ExecutionContext) {
-    // 1. Convert context to GraphQL Context
+    // Check if this is an HTTP context (REST endpoint)
+    const contextType = context.getType();
+
+    if (contextType === 'http') {
+      // For REST endpoints, use standard HTTP context
+      const http = context.switchToHttp();
+      return { req: http.getRequest(), res: http.getResponse() };
+    }
+
+    // For GraphQL endpoints, convert to GraphQL context
     const gqlCtx = GqlExecutionContext.create(context);
     const ctx = gqlCtx.getContext();
 
-    // 2. Return the Request and Response objects so Throttler can read the IP
     return { req: ctx.req, res: ctx.res };
   }
 }

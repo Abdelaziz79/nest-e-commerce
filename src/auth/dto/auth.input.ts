@@ -1,6 +1,6 @@
 // src/auth/dto/auth.input.ts
 import { Field, InputType } from '@nestjs/graphql';
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsString, Matches, MinLength } from 'class-validator';
 
 @InputType()
 export class LoginInput {
@@ -38,4 +38,27 @@ export class RefreshTokenInput {
   @Field()
   @IsString()
   token: string;
+}
+
+@InputType()
+export class RequestPasswordResetInput {
+  @Field()
+  @IsEmail()
+  email: string;
+}
+
+@InputType()
+export class ResetPasswordInput {
+  @Field()
+  @IsString()
+  token: string;
+
+  @Field()
+  @IsString()
+  @MinLength(8)
+  @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/, {
+    message:
+      'Password must contain uppercase, lowercase, and number/special character',
+  })
+  newPassword: string;
 }

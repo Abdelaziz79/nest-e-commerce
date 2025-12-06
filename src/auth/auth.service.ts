@@ -1,8 +1,10 @@
 // src/auth/auth.service.ts
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AppConfigService } from 'src/app.config.service';
+import { CreateUserInput } from 'src/users/dto/user.input'; // Ensure correct import path
 import { User } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 
@@ -14,7 +16,10 @@ export class AuthService {
     private readonly appConfigService: AppConfigService,
   ) {}
 
-  // Helper: Generate Tokens
+  // ===============================================
+  // JWT & SESSION MANAGEMENT
+  // ===============================================
+
   async generateTokens(user: User) {
     const payload = {
       sub: user._id.toString(),
@@ -47,7 +52,6 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
-    // 1. Validations
     const isLocked = await this.usersService.isAccountLocked(email);
     if (isLocked)
       throw new UnauthorizedException(
@@ -67,10 +71,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 2. Success Logic
     await this.usersService.updateLastLogin(user._id.toString());
 
-    // 3. Generate & Save Token
     const tokens = await this.generateTokens(user);
     await this.usersService.addRefreshToken(
       user._id.toString(),
@@ -80,7 +82,7 @@ export class AuthService {
     return tokens;
   }
 
-  async register(createUserInput: any) {
+  async register(createUserInput: CreateUserInput) {
     const user = await this.usersService.create(createUserInput);
     const tokens = await this.generateTokens(user);
     await this.usersService.addRefreshToken(
@@ -90,25 +92,21 @@ export class AuthService {
     return tokens;
   }
 
-  // Look how clean this is now!
   async refreshTokens(refreshToken: string) {
     try {
-      // 1. Verify Signature
       const payload = await this.jwtService.verifyAsync(refreshToken, {
         secret: this.appConfigService.jwtRefreshSecret,
       });
 
-      // 2. Generate New Tokens (We need the new one to rotate)
-      // Note: We need to fetch the user first to generate tokens
       const user = await this.usersService.findById(payload.sub);
 
-      const tokens = await this.generateTokens(user);
+      // Safe cast to User because we know the structure fits what generateTokens needs
+      const tokens = await this.generateTokens(user as any);
 
-      // 3. Perform Rotation (Atomic-like in UsersService)
       await this.usersService.rotateRefreshToken(
         user._id.toString(),
-        refreshToken, // Old
-        tokens.refreshToken, // New
+        refreshToken,
+        tokens.refreshToken,
       );
 
       return tokens;
@@ -122,11 +120,167 @@ export class AuthService {
     return true;
   }
 
+  // ===============================================
+  // SOCIAL LOGIN LOGIC (Called by Strategies)
+  // ===============================================
+
+  async validateSocialUser(details: {
+    socialId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    picture: string;
+    provider: 'google' | 'github';
+  }): Promise<User> {
+    // 1. Check if user exists by Social ID
+    let user =
+      details.provider === 'google'
+        ? await this.usersService.findByGoogleId(details.socialId)
+        : await this.usersService.findByGithubId(details.socialId);
+
+    if (user) {
+      // Check for ban/deactivation even on social login
+      if (!user.isActive)
+        throw new UnauthorizedException('Account is deactivated');
+      if (user.status === 'banned')
+        throw new UnauthorizedException('Account is banned');
+
+      // Update avatar if missing
+      if (!user.avatar && details.picture) {
+        await this.usersService.update(user._id.toString(), {
+          avatar: details.picture,
+        });
+      }
+
+      await this.usersService.updateLastLogin(user._id.toString());
+      return user;
+    }
+
+    // 2. Check if user exists by Email (Account Linking)
+    try {
+      user = await this.usersService.findByEmail(details.email);
+    } catch {
+      user = null;
+    }
+
+    if (user) {
+      // Ensure we don't link to banned accounts
+      if (!user.isActive)
+        throw new UnauthorizedException('Account is deactivated');
+
+      // Link account
+      if (details.provider === 'google') {
+        user = await this.usersService.linkGoogleAccount(
+          user._id.toString(),
+          details.socialId,
+        );
+      } else {
+        user = await this.usersService.linkGithubAccount(
+          user._id.toString(),
+          details.socialId,
+        );
+      }
+
+      await this.usersService.updateLastLogin(user._id.toString());
+      return user;
+    }
+
+    // 3. Create new user
+    const randomPassword = crypto.randomBytes(16).toString('hex') + 'A1!';
+
+    // We cast to 'any' to bypass DTO restrictions (like isEmailVerified)
+    return this.usersService
+      .create({
+        email: details.email,
+        firstName: details.firstName || 'User',
+        lastName: details.lastName || 'Social',
+        password: randomPassword,
+        avatar: details.picture,
+        isEmailVerified: true,
+      } as any)
+      .then(async (newUser) => {
+        if (details.provider === 'google') {
+          return this.usersService.linkGoogleAccount(
+            newUser._id.toString(),
+            details.socialId,
+          );
+        } else {
+          return this.usersService.linkGithubAccount(
+            newUser._id.toString(),
+            details.socialId,
+          );
+        }
+      });
+  }
+
+  // ===============================================
+  // RESET PASSWORD
+  // ===============================================
+
   generateVerificationToken(): string {
     return crypto.randomBytes(32).toString('hex');
   }
 
   generatePasswordResetToken(): string {
     return crypto.randomBytes(32).toString('hex');
+  }
+
+  async requestPasswordReset(email: string): Promise<boolean> {
+    try {
+      const user = await this.usersService.findByEmail(email);
+
+      const rawToken = this.generatePasswordResetToken();
+      const hashedToken = await bcrypt.hash(rawToken, 10);
+
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+
+      await this.usersService.setPasswordResetToken(
+        user._id.toString(),
+        hashedToken,
+        expiresAt,
+      );
+
+      const compositeToken = Buffer.from(
+        `${user._id.toString()}:${rawToken}`,
+      ).toString('base64url');
+
+      // TODO: Replace with MailService call
+      console.log(`[RESET LINK] ?token=${compositeToken}`);
+
+      return true;
+    } catch (error) {
+      return true;
+    }
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<boolean> {
+    try {
+      const decoded = Buffer.from(token, 'base64url').toString('utf-8');
+      const [userId, rawToken] = decoded.split(':');
+
+      if (!userId || !rawToken) {
+        throw new Error('Invalid structure');
+      }
+
+      const user = await this.usersService.findByIdForPasswordReset(userId);
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid or expired reset token');
+      }
+
+      const isValid = await bcrypt.compare(rawToken, user.passwordResetToken);
+      if (!isValid) {
+        throw new UnauthorizedException('Invalid reset token');
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await this.usersService.updatePassword(userId, hashedPassword);
+      await this.usersService.revokeAllRefreshTokens(userId);
+
+      return true;
+    } catch (error) {
+      throw new UnauthorizedException('Invalid or expired reset token');
+    }
   }
 }

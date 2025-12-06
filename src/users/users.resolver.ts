@@ -20,11 +20,12 @@ import {
 } from './dto/user.types';
 import { UsersService } from './users.service';
 
+import { AuditLog } from 'src/common/decorators/audit-log.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { User } from './schemas/user.schema';
+import { User, UserRole } from './schemas/user.schema';
 
 @Resolver(() => UserType)
 export class UsersResolver {
@@ -165,6 +166,7 @@ export class UsersResolver {
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
+  @AuditLog('ban_user')
   async banUser(
     @CurrentUser() admin: User,
     @Args('input') input: BanUserInput,
@@ -191,7 +193,7 @@ export class UsersResolver {
   ) {
     return this.usersService.updateRole({
       userId,
-      role: 'super_admin' as any,
+      role: 'super_admin' as UserRole,
     });
   }
 }
