@@ -70,6 +70,7 @@ export class AddressType {
 // Public User Type (for other users to see)
 @ObjectType()
 export class UserType {
+  // ✅ Make _id string (MongoDB returns ObjectId, GraphQL needs string)
   @Field(() => ID)
   _id: string;
 
@@ -79,6 +80,7 @@ export class UserType {
   @Field()
   lastName: string;
 
+  // ✅ Ensure fullName is always present (it's a virtual)
   @Field()
   fullName: string;
 
@@ -134,6 +136,7 @@ export class UserProfileType {
   @Field({ nullable: true })
   avatar?: string;
 
+  // ✅ Make addresses array non-nullable but allow empty array
   @Field(() => [AddressType])
   addresses: AddressType[];
 

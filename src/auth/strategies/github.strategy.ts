@@ -24,12 +24,15 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       clientID,
       clientSecret,
       callbackURL,
-      scope: ['user:email'],
-      // Add these options to fix SSL/network issues
+      scope: ['user:email'], // Request email access
+      // ✅ FIX: GitHub requires User-Agent header (mandatory since 2014)
       userAgent: 'nest-e-commerce-app',
       customHeaders: {
         'User-Agent': 'nest-e-commerce-app',
       },
+      // ✅ FIX: Add these options to handle SSL/proxy issues
+      proxy: false,
+      passReqToCallback: false,
     });
   }
 
@@ -54,7 +57,13 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
 
       // If no email found, we can't proceed
       if (!email) {
-        return done(new Error('No email provided by GitHub'), null);
+        console.error('GitHub Auth Error: No email provided by GitHub');
+        return done(
+          new Error(
+            'No email provided by GitHub. Please ensure your email is verified on GitHub.',
+          ),
+          null,
+        );
       }
 
       const user = await this.authService.validateSocialUser({

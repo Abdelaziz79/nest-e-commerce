@@ -30,3 +30,15 @@ export class AuthPayload {
   @Field(() => UserInfo)
   user: UserInfo;
 }
+
+@ObjectType()
+export class RegistrationResponse {
+  @Field()
+  success: boolean;
+
+  @Field()
+  message: string;
+
+  @Field()
+  email: string;
+}

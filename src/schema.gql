@@ -95,8 +95,9 @@ type Mutation {
   logout(refreshToken: String!, userId: String!): Boolean!
   promoteToSuperAdmin(userId: ID!): UserAdminType!
   refreshToken(input: RefreshTokenInput!): AuthPayload!
-  register(input: RegisterInput!): AuthPayload!
+  register(input: RegisterInput!): RegistrationResponse!
   requestPasswordReset(input: RequestPasswordResetInput!): Boolean!
+  resendOtp(input: ResendOtpInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
   setDefaultAddress(addressId: ID!): UserProfileType!
   unbanUser(userId: ID!): UserAdminType!
@@ -104,6 +105,15 @@ type Mutation {
   updateUser(input: UpdateUserInput!): UserProfileType!
   updateUserRole(input: UpdateUserRoleInput!): UserAdminType!
   updateUserStatus(input: UpdateUserStatusInput!): UserAdminType!
+  verifyEmail(input: VerifyEmailInput!): AuthPayload!
+}
+
+"""Types of OTP verification"""
+enum OtpType {
+  ACCOUNT_DELETION
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  TWO_FACTOR
 }
 
 type PaginatedUsersType {
@@ -133,18 +143,29 @@ input RegisterInput {
   password: String!
 }
 
+type RegistrationResponse {
+  email: String!
+  message: String!
+  success: Boolean!
+}
+
 input RequestPasswordResetInput {
   email: String!
 }
 
+input ResendOtpInput {
+  email: String!
+  type: OtpType!
+}
+
 input ResetPasswordInput {
+  email: String!
   newPassword: String!
-  token: String!
+  otpCode: String!
 }
 
 input UpdateAddressInput {
   address: AddressInput!
-  addressId: String!
 }
 
 input UpdateUserInput {
@@ -279,4 +300,9 @@ input UsersFilterInput {
   role: UserRole
   search: String
   status: UserStatus
+}
+
+input VerifyEmailInput {
+  email: String!
+  otpCode: String!
 }

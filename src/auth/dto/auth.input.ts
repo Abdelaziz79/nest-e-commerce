@@ -1,6 +1,13 @@
 // src/auth/dto/auth.input.ts
-import { Field, InputType } from '@nestjs/graphql';
-import { IsEmail, IsString, Matches, MinLength } from 'class-validator';
+import { Field, InputType, registerEnumType } from '@nestjs/graphql';
+import { IsEmail, IsEnum, IsString, Matches, MinLength } from 'class-validator';
+import { OtpType } from '../schemas/otp.schema';
+
+// Register OtpType enum for GraphQL
+registerEnumType(OtpType, {
+  name: 'OtpType',
+  description: 'Types of OTP verification',
+});
 
 @InputType()
 export class LoginInput {
@@ -34,6 +41,18 @@ export class RegisterInput {
 }
 
 @InputType()
+export class VerifyEmailInput {
+  @Field()
+  @IsEmail()
+  email: string;
+
+  @Field()
+  @IsString()
+  @MinLength(6)
+  otpCode: string;
+}
+
+@InputType()
 export class RefreshTokenInput {
   @Field()
   @IsString()
@@ -50,8 +69,13 @@ export class RequestPasswordResetInput {
 @InputType()
 export class ResetPasswordInput {
   @Field()
+  @IsEmail()
+  email: string;
+
+  @Field()
   @IsString()
-  token: string;
+  @MinLength(6)
+  otpCode: string;
 
   @Field()
   @IsString()
@@ -61,4 +85,15 @@ export class ResetPasswordInput {
       'Password must contain uppercase, lowercase, and number/special character',
   })
   newPassword: string;
+}
+
+@InputType()
+export class ResendOtpInput {
+  @Field()
+  @IsEmail()
+  email: string;
+
+  @Field(() => OtpType)
+  @IsEnum(OtpType)
+  type: OtpType;
 }

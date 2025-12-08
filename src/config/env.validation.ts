@@ -9,6 +9,7 @@ import {
   Min,
   Max,
   Matches,
+  IsEmail,
 } from 'class-validator';
 
 enum Environment {
@@ -19,6 +20,11 @@ enum Environment {
 }
 
 class EnvironmentVariables {
+  // Application
+  @IsOptional()
+  @IsString()
+  APP_NAME?: string;
+
   @IsEnum(Environment)
   ENVIRONMENT: Environment;
 
@@ -27,7 +33,7 @@ class EnvironmentVariables {
   @Max(65535)
   PORT: number;
 
-  // Database - Use @Matches instead of @IsUrl for more flexibility
+  // Database
   @IsString()
   @Matches(/^mongodb:\/\/.+/, {
     message: 'MONGODB_URI must be a valid MongoDB connection string',
@@ -100,6 +106,23 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   FRONTEND_URL?: string;
+
+  // Email (Gmail) - Optional but recommended
+  @IsOptional()
+  @IsEmail()
+  GMAIL_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  GMAIL_APP_PASSWORD?: string;
+
+  @IsOptional()
+  @IsString()
+  GMAIL_FROM_NAME?: string;
+
+  @IsOptional()
+  @IsEmail()
+  GMAIL_REPLY_TO?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

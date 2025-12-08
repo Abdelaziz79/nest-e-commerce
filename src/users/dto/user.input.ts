@@ -4,10 +4,10 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDate,
-  IsDateString,
   IsEmail,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsPhoneNumber,
   IsString,
@@ -22,11 +22,11 @@ import { UserRole, UserStatus } from '../schemas/user.schema';
 @InputType()
 export class CoordinatesInput {
   @Field()
-  @IsOptional()
+  @IsNumber()
   lat: number;
 
   @Field()
-  @IsOptional()
+  @IsNumber()
   lng: number;
 }
 
@@ -34,22 +34,27 @@ export class CoordinatesInput {
 export class AddressInput {
   @Field()
   @IsString()
+  @IsNotEmpty()
   address: string;
 
   @Field()
   @IsString()
+  @IsNotEmpty()
   city: string;
 
   @Field()
   @IsString()
+  @IsNotEmpty()
   country: string;
 
   @Field()
   @IsString()
+  @IsNotEmpty()
   postalCode: string;
 
   @Field()
   @IsString()
+  @IsNotEmpty()
   phoneNumber: string;
 
   @Field({ nullable: true })
@@ -197,31 +202,38 @@ export class UpdateUserInput {
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MinLength(2)
+  @MaxLength(50)
   firstName?: string;
 
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MinLength(2)
+  @MaxLength(50)
   lastName?: string;
 
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MinLength(3)
+  @MaxLength(30)
   username?: string;
 
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   displayName?: string;
 
   @Field({ nullable: true })
   @IsOptional()
-  @IsString()
+  @IsPhoneNumber()
   phone?: string;
 
   @Field({ nullable: true })
   @IsOptional()
-  @IsString()
+  @IsUrl()
   avatar?: string;
 
   @Field({ nullable: true })
@@ -255,6 +267,7 @@ export class UpdateUserInput {
 export class UpdateUserRoleInput {
   @Field()
   @IsString()
+  @IsNotEmpty()
   userId: string;
 
   @Field(() => UserRole)
@@ -266,10 +279,13 @@ export class UpdateUserRoleInput {
 export class BanUserInput {
   @Field()
   @IsString()
+  @IsNotEmpty()
   userId: string;
 
   @Field()
   @IsString()
+  @IsNotEmpty()
+  @MinLength(10, { message: 'Ban reason must be at least 10 characters' })
   reason: string;
 }
 
@@ -277,6 +293,7 @@ export class BanUserInput {
 export class UpdateUserStatusInput {
   @Field()
   @IsString()
+  @IsNotEmpty()
   userId: string;
 
   @Field(() => UserStatus)
@@ -294,10 +311,7 @@ export class AddAddressInput {
 
 @InputType()
 export class UpdateAddressInput {
-  @Field()
-  @IsString()
-  addressId: string;
-
+  // ✅ Remove addressId from here - it should be a separate argument
   @Field(() => AddressInput)
   @ValidateNested()
   @Type(() => AddressInput)
@@ -328,27 +342,21 @@ export class UsersFilterInput {
 
   @Field({ nullable: true })
   @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   page?: number;
 
   @Field({ nullable: true })
   @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   limit?: number;
 }
 
-@InputType()
+// ✅ This is for internal use only (social login)
+// Not exported as GraphQL InputType
 export class InternalCreateUserInput extends CreateUserInput {
-  @Field({ nullable: true })
-  @IsOptional()
-  @IsBoolean()
   isEmailVerified?: boolean;
-
-  @Field({ nullable: true })
-  @IsOptional()
-  @IsString()
   googleId?: string;
-
-  @Field({ nullable: true })
-  @IsOptional()
-  @IsString()
   githubId?: string;
 }

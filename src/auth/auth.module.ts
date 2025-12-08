@@ -1,21 +1,28 @@
+// src/auth/auth.module.ts
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { MongooseModule } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
 import { AppConfigModule } from 'src/app.config.module';
 import { AppConfigService } from 'src/app.config.service';
+import { MailModule } from 'src/mail/mail.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthResolver } from './auth.resolver';
 import { AuthService } from './auth.service';
-import { JwtStrategy } from './strategies/jwt.strategy';
-import { GoogleStrategy } from './strategies/google.strategy';
+import { OtpService } from './otp.service';
+import { Otp, OtpSchema } from './schemas/otp.schema';
 import { GithubStrategy } from './strategies/github.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
     UsersModule,
     AppConfigModule,
+    MailModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
+    MongooseModule.forFeature([{ name: Otp.name, schema: OtpSchema }]),
     JwtModule.registerAsync({
       imports: [AppConfigModule],
       inject: [AppConfigService],
@@ -36,6 +43,7 @@ import { GithubStrategy } from './strategies/github.strategy';
     JwtStrategy,
     GoogleStrategy,
     GithubStrategy,
+    OtpService,
   ],
   exports: [AuthService],
 })
