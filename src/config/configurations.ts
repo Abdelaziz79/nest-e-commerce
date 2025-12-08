@@ -8,6 +8,9 @@ const configuration = () => ({
   // Redis
   redis: {
     uri: process.env.REDIS_URI || 'redis://localhost:6379',
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
     ttl: parseInt(process.env.CACHE_TTL || '30000', 10),
   },
 
@@ -61,6 +64,11 @@ const configuration = () => ({
     gmailPassword: process.env.GMAIL_APP_PASSWORD,
     fromName: process.env.GMAIL_FROM_NAME || 'NestJS E-Commerce',
     replyTo: process.env.GMAIL_REPLY_TO,
+  },
+
+  // Bull Board (only in production)
+  bullBoard: {
+    password: process.env.BULL_BOARD_PASSWORD || 'change-this-password',
   },
 });
 

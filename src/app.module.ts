@@ -14,13 +14,13 @@ import { redisStore } from 'cache-manager-redis-yet';
 import { GraphQLError, GraphQLFormattedError } from 'graphql';
 import { getComplexity, simpleEstimator } from 'graphql-query-complexity';
 import { join } from 'path';
-import { AppConfigModule } from './app.config.module';
-import { AppConfigService } from './app.config.service';
 import { AuthModule } from './auth/auth.module';
 import { GqlAllExceptionsFilter } from './common/filters/gql-exception.filter';
 import { GqlThrottlerGuard } from './common/guards/gql-throttler.guard';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
+import { AppConfigModule } from './config/app.config.module';
+import { AppConfigService } from './config/app.config.service';
 import { UsersModule } from './users/users.module';
 
 @Module({

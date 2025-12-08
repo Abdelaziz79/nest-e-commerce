@@ -3,7 +3,7 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-github2';
-import { AppConfigService } from 'src/app.config.service';
+import { AppConfigService } from 'src/config/app.config.service';
 import { AuthService } from '../auth.service';
 
 @Injectable()

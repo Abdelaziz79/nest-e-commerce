@@ -1,18 +1,18 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppConfigService } from './app.config.service';
-import configurations from './config/configurations';
-import { validate } from './config/env.validation'; // ADD THIS
+import configurations from './configurations';
+import { validate } from './env.validation';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configurations],
-      validate, // ADD THIS - Validates on startup
+      validate,
       validationOptions: {
-        allowUnknown: true, // Allow extra env vars
-        abortEarly: false, // Show all errors
+        allowUnknown: true,
+        abortEarly: false,
       },
     }),
   ],

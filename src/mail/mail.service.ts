@@ -2,7 +2,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { Transporter } from 'nodemailer';
-import { AppConfigService } from 'src/app.config.service';
+import { AppConfigService } from 'src/config/app.config.service';
 
 export interface EmailOptions {
   to: string;
@@ -36,40 +36,24 @@ export class MailService {
       this.logger.warn(
         '⚠️  Gmail credentials not configured. Email functionality will be disabled.',
       );
-      this.logger.warn(
-        '💡 To enable emails, add GMAIL_USER and GMAIL_APP_PASSWORD to your .env file',
-      );
       return;
     }
 
     try {
       this.transporter = nodemailer.createTransport({
         service: 'gmail',
-        auth: {
-          user,
-          pass,
-        },
-        tls: {
-          rejectUnauthorized: false,
-        },
+        auth: { user, pass },
+        tls: { rejectUnauthorized: false },
       });
 
       await this.transporter.verify();
       this.isConfigured = true;
       this.logger.log('✅ Gmail configured successfully');
-      this.logger.log(`📧 Sending emails from: ${user}`);
     } catch (error) {
       this.logger.error('❌ Failed to configure Gmail:', error.message);
-      this.logger.error(
-        '💡 Make sure you are using an App Password, not your regular Gmail password',
-      );
-      this.logger.error('💡 Visit: https://myaccount.google.com/apppasswords');
     }
   }
 
-  /**
-   * Send a generic email
-   */
   async sendEmail(options: EmailOptions): Promise<boolean> {
     if (!this.isConfigured || !this.transporter) {
       this.logger.warn(`Email not sent to ${options.to}: Gmail not configured`);
@@ -88,12 +72,11 @@ export class MailService {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`✅ Email sent successfully to ${options.to}`);
-      this.logger.debug(`Message ID: ${info.messageId}`);
+      this.logger.log(`✅ Email sent to ${options.to}`);
       return true;
     } catch (error) {
       this.logger.error(`❌ Failed to send email to ${options.to}:`, error);
-      return false;
+      throw error;
     }
   }
 

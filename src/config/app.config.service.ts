@@ -1,7 +1,7 @@
 // src/app.config.service.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Configuration } from './config/configurations';
+import { Configuration } from './configurations';
 
 @Injectable()
 export class AppConfigService {
@@ -60,8 +60,26 @@ export class AppConfigService {
     return this.configService.get('redis.uri', { infer: true });
   }
 
+  get redisHost() {
+    return this.configService.get('redis.host', { infer: true }) as string;
+  }
+
+  get redisPort() {
+    return this.configService.get('redis.port', { infer: true }) as number;
+  }
+
+  get redisPassword() {
+    return this.configService.get('redis.password', { infer: true });
+  }
+
   get cacheTtl() {
     return this.configService.get('redis.ttl', { infer: true });
+  }
+
+  get bullBoardPassword() {
+    return this.configService.get('bullBoard.password', {
+      infer: true,
+    }) as string;
   }
 
   // Rate Limiting

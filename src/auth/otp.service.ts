@@ -1,4 +1,5 @@
-// src/auth/otp.service.ts
+// src/auth/otp.service.ts - FIXED VERSION
+
 import {
   BadRequestException,
   Injectable,
@@ -9,7 +10,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { Model } from 'mongoose';
-import { MailService } from 'src/mail/mail.service';
+import { MailQueueService } from 'src/mail/mail-queue.service';
 import { Otp, OtpType } from './schemas/otp.schema';
 
 @Injectable()
@@ -21,42 +22,39 @@ export class OtpService {
 
   constructor(
     @InjectModel(Otp.name) private readonly otpModel: Model<Otp>,
-    private readonly mailService: MailService,
+    private readonly mailQueueService: MailQueueService,
   ) {}
 
   /**
    * Generate a random 6-digit OTP
    */
-  generateOtp(): string {
+  generateOtpCode(): string {
     return crypto.randomInt(100000, 999999).toString();
   }
 
   /**
-   * Generate and send OTP
+   * ✅ NEW: Generate OTP and store in DB WITHOUT sending email
+   * This allows the caller to decide when/how to send the email
    */
-  async generateAndSendOtp(
+  async generateOtp(
     email: string,
     type: OtpType,
-    firstName?: string,
     metadata?: { ipAddress?: string; userAgent?: string; userId?: string },
   ): Promise<string> {
     try {
-      // Delete any existing unused OTPs for this email and type
+      // Delete any existing unused OTPs for this email/type
       await this.otpModel.deleteMany({
         email: email.toLowerCase(),
         type,
         isUsed: false,
       });
 
-      // Generate OTP
-      const otpCode = this.generateOtp();
+      const otpCode = this.generateOtpCode();
       const hashedOtp = await bcrypt.hash(otpCode, 10);
 
-      // Calculate expiry
       const expiresAt = new Date();
       expiresAt.setMinutes(expiresAt.getMinutes() + this.OTP_EXPIRY_MINUTES);
 
-      // Save to database
       await this.otpModel.create({
         email: email.toLowerCase(),
         code: hashedOtp,
@@ -67,15 +65,28 @@ export class OtpService {
         userAgent: metadata?.userAgent,
       });
 
-      // Send email based on type
-      await this.sendOtpEmail(email, otpCode, type, firstName);
-
       this.logger.log(`OTP generated for ${email} (type: ${type})`);
-      return otpCode; // Return the plain OTP for immediate use
+      return otpCode;
     } catch (error) {
       this.logger.error(`Failed to generate OTP for ${email}:`, error);
       throw new BadRequestException('Failed to generate OTP');
     }
+  }
+
+  /**
+   * ✅ DEPRECATED: Old method that generates AND sends email
+   * Keep for backward compatibility with password reset flow
+   */
+  async generateAndSendOtp(
+    email: string,
+    type: OtpType,
+    firstName?: string,
+    metadata?: { ipAddress?: string; userAgent?: string; userId?: string },
+  ): Promise<string> {
+    const otpCode = await this.generateOtp(email, type, metadata);
+    await this.sendOtpEmail(email, otpCode, type, firstName);
+    this.logger.log(`OTP generated and queued for ${email} (type: ${type})`);
+    return otpCode;
   }
 
   /**
@@ -87,35 +98,29 @@ export class OtpService {
     type: OtpType,
     firstName?: string,
   ): Promise<void> {
+    const name = firstName || 'User';
+
     switch (type) {
       case OtpType.EMAIL_VERIFICATION:
-        await this.mailService.sendEmailVerificationOtp(
+        await this.mailQueueService.sendEmailVerificationOtp(
           email,
-          firstName || 'User',
+          name,
           otpCode,
         );
         break;
 
       case OtpType.PASSWORD_RESET:
-        await this.mailService.sendPasswordResetOtp(
-          email,
-          firstName || 'User',
-          otpCode,
-        );
+        await this.mailQueueService.sendPasswordResetOtp(email, name, otpCode);
         break;
 
       case OtpType.TWO_FACTOR:
-        await this.mailService.sendTwoFactorOtp(
-          email,
-          firstName || 'User',
-          otpCode,
-        );
+        await this.mailQueueService.sendTwoFactorOtp(email, name, otpCode);
         break;
 
       case OtpType.ACCOUNT_DELETION:
-        await this.mailService.sendAccountDeletionOtp(
+        await this.mailQueueService.sendAccountDeletionOtp(
           email,
-          firstName || 'User',
+          name,
           otpCode,
         );
         break;
@@ -132,7 +137,6 @@ export class OtpService {
   ): Promise<boolean> {
     const normalizedEmail = email.toLowerCase();
 
-    // Find valid OTP
     const otpRecords = await this.otpModel
       .find({
         email: normalizedEmail,
@@ -149,27 +153,18 @@ export class OtpService {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
-    // Try to match OTP with any of the records (in case multiple were sent)
     for (const otpRecord of otpRecords) {
-      // Check max attempts
       if (otpRecord.attempts >= this.MAX_ATTEMPTS) {
         await this.otpModel.deleteOne({ _id: otpRecord._id });
-        this.logger.warn(
-          `Max attempts exceeded for ${normalizedEmail} (type: ${type})`,
-        );
         throw new UnauthorizedException(
           'Maximum verification attempts exceeded. Please request a new OTP.',
         );
       }
 
-      // Verify OTP
       const isValid = await bcrypt.compare(otpCode, otpRecord.code);
 
       if (isValid) {
-        // Mark as used
         await this.otpModel.updateOne({ _id: otpRecord._id }, { isUsed: true });
-
-        // Delete all other unused OTPs for this email and type
         await this.otpModel.deleteMany({
           email: normalizedEmail,
           type,
@@ -182,13 +177,9 @@ export class OtpService {
         );
         return true;
       } else {
-        // Increment attempts
         await this.otpModel.updateOne(
           { _id: otpRecord._id },
           { $inc: { attempts: 1 } },
-        );
-        this.logger.warn(
-          `Invalid OTP attempt for ${normalizedEmail} (type: ${type})`,
         );
       }
     }
@@ -244,7 +235,7 @@ export class OtpService {
     const recentOtp = await this.otpModel.findOne({
       email: normalizedEmail,
       type,
-      createdAt: { $gt: new Date(Date.now() - 60000) }, // 1 minute ago
+      createdAt: { $gt: new Date(Date.now() - 60000) },
     });
 
     if (recentOtp) {

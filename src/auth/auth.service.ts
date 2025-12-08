@@ -1,10 +1,11 @@
-// src/auth/auth.service.ts
+// src/auth/auth.service.ts - FIXED VERSION
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { AppConfigService } from 'src/app.config.service';
-import { MailService } from 'src/mail/mail.service';
+import { AppConfigService } from 'src/config/app.config.service';
+import { MailQueueService } from 'src/mail/mail-queue.service';
 import { CreateUserInput } from 'src/users/dto/user.input';
 import { User } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
@@ -17,7 +18,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly appConfigService: AppConfigService,
-    private readonly mailService: MailService,
+    private readonly mailQueueService: MailQueueService,
     private readonly otpService: OtpService,
   ) {}
 
@@ -61,7 +62,6 @@ export class AuthService {
   // ===============================================
 
   async login(email: string, password: string) {
-    // Check if account is locked
     const isLocked = await this.usersService.isAccountLocked(email);
     if (isLocked) {
       throw new UnauthorizedException(
@@ -69,35 +69,29 @@ export class AuthService {
       );
     }
 
-    // Find user
     const user = await this.usersService.findByEmail(email);
 
-    // Check if user is active
     if (!user.isActive) {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-    // Check if user is banned
     if (user.status === 'banned') {
       throw new UnauthorizedException(`Account is banned: ${user.banReason}`);
     }
 
-    // Check if email is verified
     if (!user.isEmailVerified) {
       throw new UnauthorizedException(
-        'Please verify your email before logging in. Check your inbox for the verification code.',
+        'Please verify your email before logging in.',
       );
     }
 
-    // Validate password
     const isPasswordValid = await user.validatePassword(password);
     if (!isPasswordValid) {
       await this.usersService.incrementLoginAttempts(email);
 
-      // Check if account should be locked after this attempt
       const updatedUser = await this.usersService.findByEmail(email);
       if (updatedUser.lockUntil && updatedUser.lockUntil > new Date()) {
-        await this.mailService.sendAccountLockedEmail(
+        await this.mailQueueService.sendAccountLockedEmail(
           email,
           user.firstName,
           updatedUser.lockUntil,
@@ -107,10 +101,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Reset login attempts on successful login
     await this.usersService.updateLastLogin(user._id.toString());
 
-    // Generate tokens
     const tokens = await this.generateTokens(user);
     await this.usersService.addRefreshToken(
       user._id.toString(),
@@ -121,7 +113,7 @@ export class AuthService {
   }
 
   // ===============================================
-  // REGISTER WITH EMAIL VERIFICATION
+  // ✅ FIXED: REGISTER WITH EMAIL VERIFICATION
   // ===============================================
 
   async register(
@@ -130,11 +122,10 @@ export class AuthService {
   ) {
     const user = await this.usersService.create(createUserInput);
 
-    // Generate OTP and send welcome email with verification code
-    const otpCode = await this.otpService.generateAndSendOtp(
+    // ✅ FIX: Generate OTP but DON'T send email yet
+    const otpCode = await this.otpService.generateOtp(
       user.email,
       OtpType.EMAIL_VERIFICATION,
-      user.firstName,
       {
         userId: user._id.toString(),
         ipAddress: metadata?.ipAddress,
@@ -142,8 +133,8 @@ export class AuthService {
       },
     );
 
-    // Send combined welcome + verification email
-    await this.mailService.sendWelcomeWithVerificationEmail(
+    // ✅ FIX: Send ONLY ONE email with both welcome message + OTP
+    await this.mailQueueService.sendWelcomeWithVerification(
       user.email,
       user.firstName,
       otpCode,
@@ -151,27 +142,20 @@ export class AuthService {
 
     return {
       success: true,
-      message:
-        'Registration successful! Please check your email for the verification code.',
+      message: 'Registration successful! Check your email for verification.',
       email: user.email,
     };
   }
 
-  /**
-   * Verify email with OTP
-   */
   async verifyEmail(email: string, otpCode: string) {
-    // Verify OTP
     await this.otpService.verifyOtp(email, otpCode, OtpType.EMAIL_VERIFICATION);
 
-    // Update user's email verification status
     const user = await this.usersService.findByEmail(email);
     await this.usersService.update(user._id.toString(), {
       // @ts-ignore
       isEmailVerified: true,
     });
 
-    // Generate tokens for auto-login after verification
     const tokens = await this.generateTokens(user);
     await this.usersService.addRefreshToken(
       user._id.toString(),
@@ -192,11 +176,10 @@ export class AuthService {
     try {
       const user = await this.usersService.findByEmail(email);
 
-      // Generate and send OTP
-      await this.otpService.generateAndSendOtp(
+      // ✅ Use the new method that only generates OTP
+      const otpCode = await this.otpService.generateOtp(
         email,
         OtpType.PASSWORD_RESET,
-        user.firstName,
         {
           userId: user._id.toString(),
           ipAddress: metadata?.ipAddress,
@@ -204,10 +187,16 @@ export class AuthService {
         },
       );
 
+      // ✅ Queue the email separately
+      await this.mailQueueService.sendPasswordResetOtp(
+        email,
+        user.firstName,
+        otpCode,
+      );
+
       return true;
     } catch (error) {
-      // Always return true to prevent email enumeration
-      return true;
+      return true; // Prevent email enumeration
     }
   }
 
@@ -217,24 +206,19 @@ export class AuthService {
     newPassword: string,
   ): Promise<boolean> {
     try {
-      // Verify OTP
       await this.otpService.verifyOtp(email, otpCode, OtpType.PASSWORD_RESET);
 
-      // Get user
       const user = await this.usersService.findByEmail(email);
 
-      // Update password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
       await this.usersService.updatePassword(
         user._id.toString(),
         hashedPassword,
       );
 
-      // Revoke all refresh tokens
       await this.usersService.revokeAllRefreshTokens(user._id.toString());
 
-      // Send password changed confirmation email
-      await this.mailService.sendPasswordChangedEmail(
+      await this.mailQueueService.sendPasswordChangedEmail(
         user.email,
         user.firstName,
       );
@@ -265,7 +249,6 @@ export class AuthService {
 
       return true;
     } catch (error) {
-      // Return true to prevent email enumeration
       return true;
     }
   }
@@ -312,7 +295,6 @@ export class AuthService {
     picture: string;
     provider: 'google' | 'github';
   }): Promise<User> {
-    // 1. Check if user exists by Social ID
     let user =
       details.provider === 'google'
         ? await this.usersService.findByGoogleId(details.socialId)
@@ -336,7 +318,6 @@ export class AuthService {
       return user;
     }
 
-    // 2. Check if user exists by Email (Account Linking)
     try {
       user = await this.usersService.findByEmail(details.email);
     } catch {
@@ -348,7 +329,6 @@ export class AuthService {
         throw new UnauthorizedException('Account is deactivated');
       }
 
-      // Link account
       if (details.provider === 'google') {
         user = await this.usersService.linkGoogleAccount(
           user._id.toString(),
@@ -365,7 +345,6 @@ export class AuthService {
       return user;
     }
 
-    // 3. Create new user (social accounts are auto-verified)
     const randomPassword = crypto.randomBytes(16).toString('hex') + 'A1!';
 
     const newUser = await this.usersService.create({
@@ -374,10 +353,9 @@ export class AuthService {
       lastName: details.lastName || 'Social',
       password: randomPassword,
       avatar: details.picture,
-      isEmailVerified: true, // Auto-verify social logins
+      isEmailVerified: true,
     } as any);
 
-    // Link social account
     if (details.provider === 'google') {
       user = await this.usersService.linkGoogleAccount(
         newUser._id.toString(),
@@ -390,8 +368,7 @@ export class AuthService {
       );
     }
 
-    // Send simple welcome email (no verification needed for social logins)
-    await this.mailService.sendWelcomeEmail(user.email, user.firstName);
+    await this.mailQueueService.sendWelcomeEmail(user.email, user.firstName);
 
     return user;
   }
