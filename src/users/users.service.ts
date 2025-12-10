@@ -1,9 +1,11 @@
-// src/users/users.service.ts
+// src/users/users.service.ts - UPDATED VERSION
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -21,10 +23,12 @@ import {
   UpdateUserStatusInput,
   UsersFilterInput,
 } from './dto/user.input';
-import { User, UserStatus } from './schemas/user.schema';
+import { User, UserRole, UserStatus } from './schemas/user.schema';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectConnection() private readonly connection: Connection,
@@ -88,7 +92,7 @@ export class UsersService {
   async linkGoogleAccount(userId: string, googleId: string): Promise<User> {
     const user = await this.userModel.findByIdAndUpdate(
       userId,
-      { googleId, isEmailVerified: true },
+      { googleId, isEmailVerified: true, status: UserStatus.ACTIVE },
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
@@ -100,7 +104,7 @@ export class UsersService {
   async linkGithubAccount(userId: string, githubId: string): Promise<User> {
     const user = await this.userModel.findByIdAndUpdate(
       userId,
-      { githubId, isEmailVerified: true },
+      { githubId, isEmailVerified: true, status: UserStatus.ACTIVE },
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
@@ -122,7 +126,6 @@ export class UsersService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    // Remove expired tokens first
     await this.userModel.findByIdAndUpdate(userId, {
       $pull: {
         refreshTokens: {
@@ -131,7 +134,6 @@ export class UsersService {
       },
     });
 
-    // Add new token
     await this.userModel.findByIdAndUpdate(userId, {
       $push: {
         refreshTokens: {
@@ -162,7 +164,6 @@ export class UsersService {
     );
 
     if (tokenIndex === -1) {
-      // Security Alert: Reuse detected
       user.refreshTokens = [];
       await user.save();
       throw new UnauthorizedException('Invalid Refresh Token');
@@ -224,24 +225,18 @@ export class UsersService {
 
   async findById(id: string): Promise<User> {
     const cacheKey = `user:${id}`;
-
-    // 1. Try Cache
     const cachedUser = await this.cacheManager.get<User>(cacheKey);
     if (cachedUser) {
       return cachedUser;
     }
 
-    // 2. Try DB (No .lean() needed, keeps virtuals)
     const user = await this.userModel
       .findById(id)
       .select('-password -refreshTokens')
       .exec();
 
     if (!user) throw new NotFoundException('User not found');
-
-    // 3. Save to Cache
     await this.cacheManager.set(cacheKey, user, 30000);
-
     return user;
   }
 
@@ -268,7 +263,6 @@ export class UsersService {
 
     const skip = (page - 1) * maxLimit;
 
-    // No .lean(), so virtuals work automatically
     const [users, total] = await Promise.all([
       this.userModel
         .find(query)
@@ -300,7 +294,10 @@ export class UsersService {
 
   async update(
     userId: string,
-    updateUserInput: UpdateUserInput,
+    updateUserInput: UpdateUserInput & {
+      isEmailVerified?: boolean;
+      status?: UserStatus;
+    },
   ): Promise<User> {
     if (updateUserInput.username) {
       const existingUsername = await this.userModel.findOne({
@@ -336,21 +333,134 @@ export class UsersService {
   }
 
   // =================================================================
-  // 6. ADMIN ACTIONS
+  // 6. ADMIN ACTIONS WITH PERMISSION CHECKS
   // =================================================================
 
-  async updateRole(updateRoleInput: UpdateUserRoleInput): Promise<User> {
+  /**
+   * Check if admin has permission to modify target user
+   * @param adminRole - Role of the admin performing the action
+   * @param targetUserId - ID of the user being modified
+   */
+  private async checkAdminPermission(
+    adminRole: UserRole,
+    targetUserId: string,
+  ): Promise<void> {
+    const targetUser = await this.userModel.findById(targetUserId);
+    if (!targetUser) throw new NotFoundException('Target user not found');
+
+    // Super admins can modify anyone EXCEPT other super admins (unless promoting)
+    if (
+      adminRole === UserRole.SUPER_ADMIN &&
+      targetUser.role === UserRole.SUPER_ADMIN
+    ) {
+      throw new ForbiddenException(
+        'Super admins cannot modify other super admins',
+      );
+    }
+
+    // Regular admins can only modify customers
+    if (adminRole === UserRole.ADMIN) {
+      if (targetUser.role !== UserRole.CUSTOMER) {
+        throw new ForbiddenException(
+          'Admins can only modify customer accounts',
+        );
+      }
+    }
+  }
+
+  async updateRole(
+    updateRoleInput: UpdateUserRoleInput,
+    adminRole?: UserRole,
+  ): Promise<User> {
+    // Check permissions if adminRole is provided
+    if (adminRole) {
+      await this.checkAdminPermission(adminRole, updateRoleInput.userId);
+
+      // Regular admins cannot promote users to admin or super admin
+      if (adminRole === UserRole.ADMIN) {
+        if (
+          updateRoleInput.role === UserRole.ADMIN ||
+          updateRoleInput.role === UserRole.SUPER_ADMIN
+        ) {
+          throw new ForbiddenException(
+            'Admins cannot promote users to admin or super admin',
+          );
+        }
+      }
+
+      // Super admins CAN promote to super admin (this is the change)
+      // But we'll handle it in a separate method with more security
+      if (
+        adminRole === UserRole.SUPER_ADMIN &&
+        updateRoleInput.role === UserRole.SUPER_ADMIN
+      ) {
+        throw new ForbiddenException(
+          'Use promoteToSuperAdmin mutation for promoting to super admin',
+        );
+      }
+    }
+
     const user = await this.userModel.findByIdAndUpdate(
       updateRoleInput.userId,
       { role: updateRoleInput.role },
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
+
+    this.logger.warn(
+      `User role updated: ${updateRoleInput.userId} -> ${updateRoleInput.role} by admin with role ${adminRole}`,
+    );
+
     await this.cacheManager.del(`user:${updateRoleInput.userId}`);
     return user;
   }
 
-  async updateStatus(updateStatusInput: UpdateUserStatusInput): Promise<User> {
+  /**
+   * Super Admin only - Promote user to Super Admin
+   * This is a separate, more secure method with additional logging
+   */
+  async promoteToSuperAdmin(userId: string, promotedBy: string): Promise<User> {
+    // Check if target user exists
+    const targetUser = await this.userModel.findById(userId);
+    if (!targetUser) {
+      throw new NotFoundException('Target user not found');
+    }
+
+    // Cannot promote if already super admin
+    if (targetUser.role === UserRole.SUPER_ADMIN) {
+      throw new ConflictException('User is already a super admin');
+    }
+
+    // Promote to super admin
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      {
+        role: UserRole.SUPER_ADMIN,
+        status: UserStatus.ACTIVE, // Ensure active status
+      },
+      { new: true },
+    );
+
+    if (!user) throw new NotFoundException('User not found');
+
+    // Log this critical action
+    this.logger.warn(
+      `🚨 CRITICAL: User ${userId} (${user.email}) promoted to SUPER_ADMIN by ${promotedBy}`,
+    );
+
+    await this.cacheManager.del(`user:${userId}`);
+    return user;
+  }
+
+  async updateStatus(
+    updateStatusInput: UpdateUserStatusInput,
+    adminRole?: UserRole,
+  ): Promise<User> {
+    // Check permissions if adminRole is provided
+    if (adminRole) {
+      await this.checkAdminPermission(adminRole, updateStatusInput.userId);
+    }
+
     const user = await this.userModel.findByIdAndUpdate(
       updateStatusInput.userId,
       { status: updateStatusInput.status },
@@ -361,7 +471,16 @@ export class UsersService {
     return user;
   }
 
-  async banUser(banInput: BanUserInput, bannedBy: string): Promise<User> {
+  async banUser(
+    banInput: BanUserInput,
+    bannedBy: string,
+    adminRole?: UserRole,
+  ): Promise<User> {
+    // Check permissions if adminRole is provided
+    if (adminRole) {
+      await this.checkAdminPermission(adminRole, banInput.userId);
+    }
+
     const user = await this.userModel.findByIdAndUpdate(
       banInput.userId,
       {
@@ -373,11 +492,21 @@ export class UsersService {
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
+
+    this.logger.warn(
+      `User banned: ${banInput.userId} - Reason: ${banInput.reason} - By: ${bannedBy}`,
+    );
+
     await this.cacheManager.del(`user:${banInput.userId}`);
     return user;
   }
 
-  async unbanUser(userId: string): Promise<User> {
+  async unbanUser(userId: string, adminRole?: UserRole): Promise<User> {
+    // Check permissions if adminRole is provided
+    if (adminRole) {
+      await this.checkAdminPermission(adminRole, userId);
+    }
+
     const user = await this.userModel.findByIdAndUpdate(
       userId,
       {
@@ -389,6 +518,9 @@ export class UsersService {
       { new: true },
     );
     if (!user) throw new NotFoundException('User not found');
+
+    this.logger.log(`User unbanned: ${userId}`);
+
     await this.cacheManager.del(`user:${userId}`);
     return user;
   }
@@ -507,7 +639,7 @@ export class UsersService {
   }
 
   // =================================================================
-  // 9. RESET PASSWORD HELPERS (Optimized)
+  // 9. RESET PASSWORD HELPERS
   // =================================================================
 
   async setPasswordResetToken(
@@ -521,7 +653,6 @@ export class UsersService {
     });
   }
 
-  // ✅ New Method: Lookup specific user, checking if token is expired
   async findByIdForPasswordReset(userId: string): Promise<User | null> {
     const user = await this.userModel
       .findById(userId)

@@ -117,7 +117,7 @@ export class EmailProcessor {
         throw new Error('Email sending returned false');
       }
 
-      this.logger.log(`✅ Email job ${job.id} completed successfully`);
+      this.logger.log(`Email job ${job.id} completed successfully`);
     } catch (error) {
       this.logger.error(
         `❌ Email job ${job.id} failed (Attempt ${job.attemptsMade + 1}):`,

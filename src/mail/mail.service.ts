@@ -48,7 +48,7 @@ export class MailService {
 
       await this.transporter.verify();
       this.isConfigured = true;
-      this.logger.log('✅ Gmail configured successfully');
+      this.logger.log('Gmail configured successfully');
     } catch (error) {
       this.logger.error('❌ Failed to configure Gmail:', error.message);
     }
@@ -72,7 +72,7 @@ export class MailService {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`✅ Email sent to ${options.to}`);
+      this.logger.log(`Email sent to ${options.to}`);
       return true;
     } catch (error) {
       this.logger.error(`❌ Failed to send email to ${options.to}:`, error);
@@ -81,7 +81,7 @@ export class MailService {
   }
 
   // ==========================================
-  // ✅ NEW: COMBINED WELCOME + VERIFICATION EMAIL
+  // NEW: COMBINED WELCOME + VERIFICATION EMAIL
   // ==========================================
 
   /**
@@ -213,7 +213,7 @@ export class MailService {
                       
                       <div style="background-color: #E8F5E9; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0; border-radius: 4px;">
                         <p style="margin: 0; font-size: 14px; color: #2E7D32; font-weight: 600;">
-                          ✅ Account Verified
+                          Account Verified
                         </p>
                         <p style="margin: 10px 0 0 0; font-size: 14px; color: #2E7D32;">
                           Your email has been automatically verified. You can start using your account right away!

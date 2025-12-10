@@ -39,7 +39,7 @@ export class MailQueueService {
   ) {}
 
   /**
-   * ✅ FIXED: Keep completed jobs for 1 hour so they appear in Bull Board
+   * FIXED: Keep completed jobs for 1 hour so they appear in Bull Board
    */
   private async addToQueue(
     jobData: EmailJobData,
@@ -50,12 +50,12 @@ export class MailQueueService {
       const job = await this.emailQueue.add(jobData, {
         priority,
         delay,
-        // ✅ FIX: Keep completed jobs for 1 hour (3600 seconds)
+        // FIX: Keep completed jobs for 1 hour (3600 seconds)
         removeOnComplete: {
           age: 3600, // Keep for 1 hour
           count: 100, // Keep last 100
         },
-        // ✅ Keep failed jobs for debugging
+        // Keep failed jobs for debugging
         removeOnFail: {
           age: 86400, // Keep for 24 hours
           count: 500, // Keep last 500

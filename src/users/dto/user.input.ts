@@ -311,7 +311,6 @@ export class AddAddressInput {
 
 @InputType()
 export class UpdateAddressInput {
-  // ✅ Remove addressId from here - it should be a separate argument
   @Field(() => AddressInput)
   @ValidateNested()
   @Type(() => AddressInput)
@@ -353,10 +352,19 @@ export class UsersFilterInput {
   limit?: number;
 }
 
-// ✅ This is for internal use only (social login)
+// This is for internal use only (social login)
 // Not exported as GraphQL InputType
 export class InternalCreateUserInput extends CreateUserInput {
   isEmailVerified?: boolean;
   googleId?: string;
   githubId?: string;
+}
+
+// This is for internal use only (social login)
+// Not exported as GraphQL InputType
+export class InternalUpdateUserInput extends UpdateUserInput {
+  isEmailVerified?: boolean;
+  googleId?: string;
+  githubId?: string;
+  status?: UserStatus;
 }

@@ -137,4 +137,17 @@ export class AppConfigService {
   get gmailReplyTo() {
     return this.configService.get('email.replyTo', { infer: true });
   }
+
+  // Storage
+  get storageBaseUrl() {
+    return this.configService.get('storage.baseUrl', { infer: true });
+  }
+
+  get storageUploadPath() {
+    return this.configService.get('storage.uploadPath', { infer: true });
+  }
+
+  get storageMaxFileSize() {
+    return this.configService.get('storage.maxFileSize', { infer: true });
+  }
 }

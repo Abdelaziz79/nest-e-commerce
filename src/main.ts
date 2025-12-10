@@ -1,9 +1,10 @@
-// src/main.ts - Add Bull Board Authentication
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import basicAuth from 'express-basic-auth';
+import { graphqlUploadExpress } from 'graphql-upload-ts';
 import helmet from 'helmet';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { SanitizePipe } from './common/pipes/sanitize.pipe';
 import { AppConfigService } from './config/app.config.service';
@@ -15,12 +16,34 @@ async function bootstrap() {
         ? ['error', 'warn']
         : ['log', 'error', 'warn', 'debug', 'verbose'],
   });
-
   const configService = app.get(AppConfigService);
   const logger = new Logger('Bootstrap');
   const isDev = configService.isDevelopment;
 
-  // ✅ Secure Bull Board with Basic Auth (only in production)
+  // CRITICAL: Add graphql-upload middleware BEFORE other middleware
+  // This must be added before helmet and CORS
+  app.use(
+    graphqlUploadExpress({
+      maxFileSize: 10 * 1024 * 1024, // 10MB max file size
+      maxFiles: 10, // Max 10 files per request
+    }),
+  );
+
+  // Serve static files (uploaded files)
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+    maxAge: isDev ? 0 : 31536000000,
+    setHeaders: (res, path) => {
+      res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.set('Access-Control-Allow-Origin', '*');
+
+      if (path.endsWith('.webp')) {
+        res.set('Content-Type', 'image/webp');
+      }
+    },
+  });
+
+  // Secure Bull Board with Basic Auth (only in production)
   if (!isDev) {
     app.use(
       '/admin/queues',
@@ -70,8 +93,8 @@ async function bootstrap() {
         : {
             directives: {
               defaultSrc: ["'self'"],
-              styleSrc: ["'self'", "'unsafe-inline'"], // Bull Board needs inline styles
-              scriptSrc: ["'self'", "'unsafe-inline'"], // Bull Board needs inline scripts
+              styleSrc: ["'self'", "'unsafe-inline'"],
+              scriptSrc: ["'self'", "'unsafe-inline'"],
               imgSrc: [
                 "'self'",
                 'data:',

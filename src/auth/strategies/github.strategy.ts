@@ -9,7 +9,7 @@ import { AuthService } from '../auth.service';
 @Injectable()
 export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
   constructor(
-    private readonly configService: AppConfigService,
+    configService: AppConfigService,
     private readonly authService: AuthService,
   ) {
     const clientID = configService.githubClientId;
@@ -25,12 +25,12 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       clientSecret,
       callbackURL,
       scope: ['user:email'], // Request email access
-      // ✅ FIX: GitHub requires User-Agent header (mandatory since 2014)
+      // FIX: GitHub requires User-Agent header (mandatory since 2014)
       userAgent: 'nest-e-commerce-app',
       customHeaders: {
         'User-Agent': 'nest-e-commerce-app',
       },
-      // ✅ FIX: Add these options to handle SSL/proxy issues
+      // FIX: Add these options to handle SSL/proxy issues
       proxy: false,
       passReqToCallback: false,
     });

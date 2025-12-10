@@ -33,7 +33,7 @@ export class OtpService {
   }
 
   /**
-   * ✅ NEW: Generate OTP and store in DB WITHOUT sending email
+   * NEW: Generate OTP and store in DB WITHOUT sending email
    * This allows the caller to decide when/how to send the email
    */
   async generateOtp(
@@ -74,7 +74,7 @@ export class OtpService {
   }
 
   /**
-   * ✅ DEPRECATED: Old method that generates AND sends email
+   * DEPRECATED: Old method that generates AND sends email
    * Keep for backward compatibility with password reset flow
    */
   async generateAndSendOtp(

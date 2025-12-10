@@ -52,7 +52,7 @@ export class AuthController {
         </head>
         <body>
           <div class="success">
-            <h2>✅ Google Authentication Successful!</h2>
+            <h2>Google Authentication Successful!</h2>
             <p><strong>User:</strong> ${req.user.email}</p>
             <p><strong>Name:</strong> ${req.user.firstName} ${req.user.lastName}</p>
             <p><strong>User ID:</strong> ${req.user._id}</p>
@@ -112,7 +112,7 @@ export class AuthController {
         </head>
         <body>
           <div class="success">
-            <h2>✅ GitHub Authentication Successful!</h2>
+            <h2>GitHub Authentication Successful!</h2>
             <p><strong>User:</strong> ${req.user.email || 'N/A'}</p>
             <p><strong>Name:</strong> ${req.user.firstName} ${req.user.lastName}</p>
             <p><strong>User ID:</strong> ${req.user._id}</p>

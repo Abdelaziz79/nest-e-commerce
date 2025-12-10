@@ -1,13 +1,17 @@
-// src/auth/auth.service.ts - FIXED VERSION
+// src/auth/auth.service.ts - UPDATED VERSION
 
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AppConfigService } from 'src/config/app.config.service';
 import { MailQueueService } from 'src/mail/mail-queue.service';
 import { CreateUserInput } from 'src/users/dto/user.input';
-import { User } from '../users/schemas/user.schema';
+import { User, UserStatus } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { OtpService } from './otp.service';
 import { OtpType } from './schemas/otp.schema';
@@ -75,7 +79,7 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-    if (user.status === 'banned') {
+    if (user.status === UserStatus.BANNED) {
       throw new UnauthorizedException(`Account is banned: ${user.banReason}`);
     }
 
@@ -113,7 +117,7 @@ export class AuthService {
   }
 
   // ===============================================
-  // ✅ FIXED: REGISTER WITH EMAIL VERIFICATION
+  // REGISTER WITH EMAIL VERIFICATION
   // ===============================================
 
   async register(
@@ -122,7 +126,6 @@ export class AuthService {
   ) {
     const user = await this.usersService.create(createUserInput);
 
-    // ✅ FIX: Generate OTP but DON'T send email yet
     const otpCode = await this.otpService.generateOtp(
       user.email,
       OtpType.EMAIL_VERIFICATION,
@@ -133,7 +136,6 @@ export class AuthService {
       },
     );
 
-    // ✅ FIX: Send ONLY ONE email with both welcome message + OTP
     await this.mailQueueService.sendWelcomeWithVerification(
       user.email,
       user.firstName,
@@ -148,17 +150,27 @@ export class AuthService {
   }
 
   async verifyEmail(email: string, otpCode: string) {
+    // Check if user exists and if already verified
+    const user = await this.usersService.findByEmail(email);
+
+    if (user.isEmailVerified) {
+      throw new BadRequestException('Email is already verified');
+    }
+
     await this.otpService.verifyOtp(email, otpCode, OtpType.EMAIL_VERIFICATION);
 
-    const user = await this.usersService.findByEmail(email);
+    // Update user: set verified AND change status to ACTIVE
     await this.usersService.update(user._id.toString(), {
-      // @ts-ignore
       isEmailVerified: true,
+      status: UserStatus.ACTIVE,
     });
 
-    const tokens = await this.generateTokens(user);
+    // Fetch updated user for token generation
+    const updatedUser = await this.usersService.findByEmail(email);
+
+    const tokens = await this.generateTokens(updatedUser);
     await this.usersService.addRefreshToken(
-      user._id.toString(),
+      updatedUser._id.toString(),
       tokens.refreshToken,
     );
 
@@ -176,7 +188,6 @@ export class AuthService {
     try {
       const user = await this.usersService.findByEmail(email);
 
-      // ✅ Use the new method that only generates OTP
       const otpCode = await this.otpService.generateOtp(
         email,
         OtpType.PASSWORD_RESET,
@@ -187,7 +198,6 @@ export class AuthService {
         },
       );
 
-      // ✅ Queue the email separately
       await this.mailQueueService.sendPasswordResetOtp(
         email,
         user.firstName,
@@ -241,6 +251,12 @@ export class AuthService {
     try {
       const user = await this.usersService.findByEmail(email);
 
+      if (type === OtpType.EMAIL_VERIFICATION && user.isEmailVerified) {
+        throw new BadRequestException(
+          'Email is already verified. No need to resend OTP.',
+        );
+      }
+
       await this.otpService.resendOtp(email, type, user.firstName, {
         userId: user._id.toString(),
         ipAddress: metadata?.ipAddress,
@@ -249,6 +265,10 @@ export class AuthService {
 
       return true;
     } catch (error) {
+      // If it's a BadRequestException (already verified), re-throw it
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       return true;
     }
   }
@@ -304,7 +324,7 @@ export class AuthService {
       if (!user.isActive) {
         throw new UnauthorizedException('Account is deactivated');
       }
-      if (user.status === 'banned') {
+      if (user.status === UserStatus.BANNED) {
         throw new UnauthorizedException('Account is banned');
       }
 
@@ -354,6 +374,7 @@ export class AuthService {
       password: randomPassword,
       avatar: details.picture,
       isEmailVerified: true,
+      status: UserStatus.ACTIVE, // Social login users are active immediately
     } as any);
 
     if (details.provider === 'google') {

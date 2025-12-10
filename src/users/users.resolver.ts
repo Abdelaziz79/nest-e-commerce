@@ -1,7 +1,11 @@
-// src/users/users.resolver.ts
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { AuditLog } from 'src/common/decorators/audit-log.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import {
   AddAddressInput,
   BanUserInput,
@@ -18,14 +22,8 @@ import {
   UserProfileType,
   UserType,
 } from './dto/user.types';
+import { User } from './schemas/user.schema';
 import { UsersService } from './users.service';
-
-import { AuditLog } from 'src/common/decorators/audit-log.decorator';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { User, UserRole } from './schemas/user.schema';
 
 @Resolver(() => UserType)
 export class UsersResolver {
@@ -150,16 +148,24 @@ export class UsersResolver {
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
-  async updateUserRole(@Args('input') input: UpdateUserRoleInput) {
-    return this.usersService.updateRole(input);
+  @AuditLog('update_user_role')
+  async updateUserRole(
+    @CurrentUser() admin: User,
+    @Args('input') input: UpdateUserRoleInput,
+  ) {
+    return this.usersService.updateRole(input, admin.role);
   }
 
   @SkipThrottle()
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
-  async updateUserStatus(@Args('input') input: UpdateUserStatusInput) {
-    return this.usersService.updateStatus(input);
+  @AuditLog('update_user_status')
+  async updateUserStatus(
+    @CurrentUser() admin: User,
+    @Args('input') input: UpdateUserStatusInput,
+  ) {
+    return this.usersService.updateStatus(input, admin.role);
   }
 
   @SkipThrottle()
@@ -171,29 +177,34 @@ export class UsersResolver {
     @CurrentUser() admin: User,
     @Args('input') input: BanUserInput,
   ) {
-    return this.usersService.banUser(input, admin._id.toString());
+    return this.usersService.banUser(input, admin._id.toString(), admin.role);
   }
 
   @SkipThrottle()
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
-  async unbanUser(@Args('userId', { type: () => ID }) userId: string) {
-    return this.usersService.unbanUser(userId);
+  @AuditLog('unban_user')
+  async unbanUser(
+    @CurrentUser() admin: User,
+    @Args('userId', { type: () => ID }) userId: string,
+  ) {
+    return this.usersService.unbanUser(userId, admin.role);
   }
 
-  // Super Admin only mutations
+  // ==========================================
+  // Super Admin Only - Promote to Super Admin
+  // ==========================================
 
   @SkipThrottle()
   @Mutation(() => UserAdminType)
   @UseGuards(GqlAuthGuard, RolesGuard)
   @Roles('super_admin')
+  @AuditLog('promote_to_super_admin')
   async promoteToSuperAdmin(
+    @CurrentUser() admin: User,
     @Args('userId', { type: () => ID }) userId: string,
   ) {
-    return this.usersService.updateRole({
-      userId,
-      role: 'super_admin' as UserRole,
-    });
+    return this.usersService.promoteToSuperAdmin(userId, admin._id.toString());
   }
 }

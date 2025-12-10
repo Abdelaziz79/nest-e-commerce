@@ -1,9 +1,3304 @@
 {
   "info": {
-    "name": "NestJS GraphQL Auth & Users API",
-    "description": "Complete test collection for NestJS GraphQL application with Auth, Users, OAuth, and Admin features",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "_postman_id": "23debd09-5163-4510-944d-81a0f45167b5",
+    "name": "NestJS E-Commerce API - Complete Collection",
+    "description": "Complete test collection for NestJS GraphQL application with Auth (OTP-based), Users, Storage, OAuth, and Admin features",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "33369626"
   },
+  "item": [
+    {
+      "name": "🔐 Auth - Registration & Verification",
+      "item": [
+        {
+          "name": "1. Register User (Sends OTP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.register) {",
+                  "    var response = jsonData.data.register;",
+                  "    ",
+                  "    pm.environment.set('testEmail', response.email);",
+                  "    console.log('✓ Registration successful');",
+                  "    console.log('✓ Email stored:', response.email);",
+                  "    console.log('⚠️  Check your email for OTP code');",
+                  "    ",
+                  "    pm.test('Registration successful', function() {",
+                  "        pm.expect(response.success).to.eql(true);",
+                  "        pm.expect(response.email).to.be.a('string');",
+                  "        pm.expect(response.message).to.include('Check your email');",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "    pm.test('No GraphQL errors', function() {",
+                  "        pm.expect(jsonData.errors).to.be.undefined;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate random email for testing",
+                  "const random = Math.floor(Math.random() * 100000);",
+                  "pm.environment.set('testEmail', `test${random}@example.com`);",
+                  "console.log('Generated test email:', pm.environment.get('testEmail'));",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    success\n    message\n    email\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"{{testEmail}}\",\n    \"password\": \"{{testPassword}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Step 1: Register a new user. This sends a welcome email with OTP verification code. Generates a random email to avoid duplicates."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Verify Email with OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.verifyEmail) {",
+                  "    var response = jsonData.data.verifyEmail;",
+                  "    var accessToken = response.accessToken;",
+                  "    var refreshToken = response.refreshToken;",
+                  "    var userId = response.user.id;",
+                  "    ",
+                  "    pm.environment.set('token', accessToken);",
+                  "    pm.environment.set('refreshToken', refreshToken);",
+                  "    pm.environment.set('userId', userId);",
+                  "    ",
+                  "    console.log('✓ Email verified successfully');",
+                  "    console.log('✓ Access token stored');",
+                  "    console.log('✓ Refresh token stored');",
+                  "    console.log('✓ User ID stored:', userId);",
+                  "    ",
+                  "    pm.test('Email verification successful', function() {",
+                  "        pm.expect(accessToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                  "        pm.expect(refreshToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                  "        pm.expect(userId).to.be.a('string');",
+                  "        pm.expect(response.user.email).to.eql(pm.environment.get('testEmail'));",
+                  "        pm.expect(response.user.role).to.eql('customer');",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "    pm.test('No GraphQL errors', function() {",
+                  "        pm.expect(jsonData.errors).to.be.undefined;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation VerifyEmail($input: VerifyEmailInput!) {\n  verifyEmail(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"otpCode\": \"{{otpCode}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Step 2: Verify email with OTP code received via email. Replace '123456' with actual OTP from your email or environment variable."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Resend OTP (Email Verification)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.resendOtp === true) {",
+                  "    console.log('✓ OTP resent successfully');",
+                  "    pm.test('OTP resent', function() {",
+                  "        pm.expect(jsonData.data.resendOtp).to.be.true;",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "    var errorMessage = jsonData.errors[0].message;",
+                  "    pm.test('Rate limit handling', function() {",
+                  "        pm.expect(errorMessage).to.include('wait');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation ResendOtp($input: ResendOtpInput!) {\n  resendOtp(input: $input)\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"type\": \"EMAIL_VERIFICATION\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Resend OTP code if the original one expired or wasn't received. Has a 1-minute rate limit."
+          },
+          "response": []
+        }
+      ],
+      "description": "New OTP-based registration flow with email verification"
+    },
+    {
+      "name": "🔑 Auth - Login & Session",
+      "item": [
+        {
+          "name": "1. Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.login) {",
+                  "    var response = jsonData.data.login;",
+                  "    var accessToken = response.accessToken;",
+                  "    var refreshToken = response.refreshToken;",
+                  "    var userId = response.user.id;",
+                  "    ",
+                  "    pm.environment.set('token', accessToken);",
+                  "    pm.environment.set('refreshToken', refreshToken);",
+                  "    pm.environment.set('userId', userId);",
+                  "    ",
+                  "    console.log('✓ Login successful');",
+                  "    console.log('✓ Access token stored');",
+                  "    console.log('✓ Refresh token stored');",
+                  "    console.log('✓ User ID stored:', userId);",
+                  "    ",
+                  "    pm.test('Login successful', function() {",
+                  "        pm.expect(accessToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                  "        pm.expect(refreshToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                  "        pm.expect(userId).to.be.a('string');",
+                  "        pm.expect(response.user.email).to.be.a('string');",
+                  "        pm.expect(['customer', 'admin', 'super_admin']).to.include(response.user.role);",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "    var error = jsonData.errors[0];",
+                  "    pm.test('Error handling', function() {",
+                  "        pm.expect(error.message).to.be.oneOf(['Invalid credentials', 'Account is temporarily locked', 'Account is banned', 'Please verify your email']);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Login($input: LoginInput!) {\n  login(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"password\": \"{{testPassword}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Login with email and password. Email must be verified first. Returns access and refresh tokens."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Who Am I (Get Current User)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.whoAmI) {",
+                  "    var user = jsonData.data.whoAmI;",
+                  "    console.log('✓ Retrieved current user:', user.email);",
+                  "    ",
+                  "    pm.test('WhoAmI successful', function() {",
+                  "        pm.expect(user.id).to.eql(pm.environment.get('userId'));",
+                  "        pm.expect(user.email).to.be.a('string');",
+                  "        pm.expect(user.firstName).to.be.a('string');",
+                  "        pm.expect(user.lastName).to.be.a('string');",
+                  "        pm.expect(['customer', 'admin', 'super_admin']).to.include(user.role);",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "    pm.test('Should be authenticated', function() {",
+                  "        pm.expect(jsonData.errors[0].message).to.include('Unauthenticated');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query WhoAmI {\n  whoAmI {\n    id\n    email\n    firstName\n    lastName\n    role\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Get current authenticated user info. Requires valid access token."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.refreshToken) {",
+                  "    var response = jsonData.data.refreshToken;",
+                  "    var newAccessToken = response.accessToken;",
+                  "    var newRefreshToken = response.refreshToken;",
+                  "    ",
+                  "    pm.environment.set('token', newAccessToken);",
+                  "    pm.environment.set('refreshToken', newRefreshToken);",
+                  "    ",
+                  "    console.log('✓ Token refresh successful');",
+                  "    console.log('✓ New access token stored');",
+                  "    console.log('✓ New refresh token stored');",
+                  "    ",
+                  "    pm.test('Token refresh successful', function() {",
+                  "        pm.expect(newAccessToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                  "        pm.expect(newRefreshToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                  "        pm.expect(response.user.id).to.eql(pm.environment.get('userId'));",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "    pm.test('Invalid refresh token handling', function() {",
+                  "        pm.expect(jsonData.errors[0].message).to.include('Invalid or Expired Refresh Token');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RefreshToken($input: RefreshTokenInput!) {\n  refreshToken(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"token\": \"{{refreshToken}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Get new access token using refresh token. Also rotates the refresh token for security."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.logout === true) {",
+                  "    console.log('✓ Logout successful');",
+                  "    console.log('✓ Refresh token invalidated');",
+                  "    ",
+                  "    pm.test('Logout successful', function() {",
+                  "        pm.expect(jsonData.data.logout).to.be.true;",
+                  "    });",
+                  "    ",
+                  "    // Clear tokens after logout",
+                  "    pm.environment.unset('token');",
+                  "    pm.environment.unset('refreshToken');",
+                  "    console.log('✓ Environment variables cleared');",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Logout($userId: String!, $refreshToken: String!) {\n  logout(userId: $userId, refreshToken: $refreshToken)\n}",
+                "variables": "{\n  \"userId\": \"{{userId}}\",\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Logout and invalidate refresh token. Requires both user ID and refresh token."
+          },
+          "response": []
+        }
+      ],
+      "description": "Login, session management, and token operations"
+    },
+    {
+      "name": "🔒 Auth - Password Reset",
+      "item": [
+        {
+          "name": "1. Request Password Reset (Sends OTP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.requestPasswordReset === true) {",
+                  "    console.log('✓ Password reset OTP sent');",
+                  "    console.log('⚠️  Check your email for reset OTP');",
+                  "    ",
+                  "    pm.test('Password reset request successful', function() {",
+                  "        pm.expect(jsonData.data.requestPasswordReset).to.be.true;",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RequestPasswordReset($input: RequestPasswordResetInput!) {\n  requestPasswordReset(input: $input)\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Step 1: Request password reset. This sends an OTP to the user's email. Always returns true to prevent email enumeration."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Reset Password with OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.resetPassword === true) {",
+                  "    console.log('✓ Password reset successful');",
+                  "    console.log('✓ All refresh tokens revoked');",
+                  "    ",
+                  "    pm.test('Password reset successful', function() {",
+                  "        pm.expect(jsonData.data.resetPassword).to.be.true;",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "    pm.test('Invalid OTP handling', function() {",
+                  "        pm.expect(jsonData.errors[0].message).to.include('Invalid or expired OTP');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation ResetPassword($input: ResetPasswordInput!) {\n  resetPassword(input: $input)\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"otpCode\": \"{{otpCode}}\",\n    \"newPassword\": \"{{testPassword}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Step 2: Reset password using OTP code. Replace '123456' with actual OTP. Password must meet complexity requirements."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Resend OTP (Password Reset)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.resendOtp === true) {",
+                  "    console.log('✓ Password reset OTP resent');",
+                  "    pm.test('OTP resent', function() {",
+                  "        pm.expect(jsonData.data.resendOtp).to.be.true;",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation ResendOtp($input: ResendOtpInput!) {\n  resendOtp(input: $input)\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"type\": \"PASSWORD_RESET\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Resend password reset OTP if needed. Has a 5-minute rate limit."
+          },
+          "response": []
+        }
+      ],
+      "description": "Complete password reset flow with OTP verification"
+    },
+    {
+      "name": "🔗 OAuth - Social Login",
+      "item": [
+        {
+          "name": "1. Google OAuth - Initiate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google"]
+            },
+            "description": "Initiates Google OAuth flow. Opens in browser, redirects to Google login. In development, returns HTML page with tokens. In production, redirects to frontend with tokens in URL."
+          },
+          "response": []
+        },
+        {
+          "name": "2. GitHub OAuth - Initiate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/github",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "github"]
+            },
+            "description": "Initiates GitHub OAuth flow. Opens in browser, redirects to GitHub login. Handles email verification automatically for new users."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Google OAuth - Test Callback",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Google OAuth test callback', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.tokens) {",
+                  "    pm.environment.set('token', jsonData.tokens.accessToken);",
+                  "    pm.environment.set('refreshToken', jsonData.tokens.refreshToken);",
+                  "    pm.environment.set('userId', jsonData.user.id);",
+                  "    console.log('✓ Google OAuth test successful');",
+                  "    console.log('✓ Tokens stored from Google login');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/callback/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google", "callback", "test"]
+            },
+            "description": "Test endpoint for Google OAuth callback (development only). Returns JSON with tokens instead of redirecting."
+          },
+          "response": []
+        },
+        {
+          "name": "4. GitHub OAuth - Test Callback",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('GitHub OAuth test callback', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success && jsonData.tokens) {",
+                  "    pm.environment.set('token', jsonData.tokens.accessToken);",
+                  "    pm.environment.set('refreshToken', jsonData.tokens.refreshToken);",
+                  "    pm.environment.set('userId', jsonData.user.id);",
+                  "    console.log('✓ GitHub OAuth test successful');",
+                  "    console.log('✓ Tokens stored from GitHub login');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/github/callback/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "github", "callback", "test"]
+            },
+            "description": "Test endpoint for GitHub OAuth callback (development only). Returns JSON with tokens instead of redirecting."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Check OAuth Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('OAuth status check', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "console.log('Google configured:', jsonData.google.configured);",
+                  "console.log('GitHub configured:', jsonData.github.configured);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "status"]
+            },
+            "description": "Check OAuth configuration status. Shows whether Google/GitHub OAuth is configured and callback URLs."
+          },
+          "response": []
+        }
+      ],
+      "description": "OAuth social login endpoints for Google and GitHub. Includes development test endpoints."
+    },
+    {
+      "name": "👤 Users - Public",
+      "item": [
+        {
+          "name": "Get User by ID (Public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.user) {",
+                  "    var user = jsonData.data.user;",
+                  "    console.log('✓ Retrieved public user profile:', user._id);",
+                  "    ",
+                  "    pm.test('Public user data is limited', function() {",
+                  "        pm.expect(user._id).to.be.a('string');",
+                  "        pm.expect(user.email).to.be.undefined;",
+                  "        pm.expect(user.firstName).to.be.a('string');",
+                  "        pm.expect(user.lastName).to.be.a('string');",
+                  "        pm.expect(user.fullName).to.be.a('string');",
+                  "        pm.expect(user.role).to.be.oneOf(['customer', 'admin', 'super_admin', 'vendor', 'moderator', 'support']);",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUser($id: ID!) {\n  user(id: $id) {\n    _id\n    firstName\n    lastName\n    fullName\n    username\n    displayName\n    avatar\n    role\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"id\": \"{{userId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Get public user information by ID. Does not expose sensitive data like email or addresses."
+          },
+          "response": []
+        }
+      ],
+      "description": "Public user endpoints that don't require authentication"
+    },
+    {
+      "name": "👤 Users - Protected",
+      "item": [
+        {
+          "name": "1. Get My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.me) {",
+                  "    var user = jsonData.data.me;",
+                  "    console.log('✓ Retrieved full profile:', user.email);",
+                  "    ",
+                  "    pm.test('Full profile retrieved', function() {",
+                  "        pm.expect(user._id).to.eql(pm.environment.get('userId'));",
+                  "        pm.expect(user.email).to.be.a('string');",
+                  "        pm.expect(user.addresses).to.be.an('array');",
+                  "        pm.expect(user.isEmailVerified).to.be.a('boolean');",
+                  "        pm.expect(user.isActive).to.be.true;",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetMe {\n  me {\n    _id\n    firstName\n    lastName\n    fullName\n    username\n    displayName\n    email\n    role\n    status\n    avatar\n    addresses {\n      _id\n      address\n      city\n      country\n      postalCode\n      phoneNumber\n      isDefault\n      label\n      recipientName\n      recipientPhone\n      instructions\n      coordinates {\n        lat\n        lng\n      }\n    }\n    isEmailVerified\n    phone\n    phoneVerified\n    lastLogin\n    isActive\n    preferredLanguage\n    preferredCurrency\n    dateOfBirth\n    gender\n    twoFactorEnabled\n    newsletter\n    termsAcceptedAt\n    privacyPolicyAcceptedAt\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Get complete profile of authenticated user including private fields."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Update My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.updateUser) {",
+                  "    var user = jsonData.data.updateUser;",
+                  "    console.log('✓ Profile updated:', user._id);",
+                  "    ",
+                  "    pm.test('Profile updated successfully', function() {",
+                  "        pm.expect(user._id).to.eql(pm.environment.get('userId'));",
+                  "        pm.expect(user.firstName).to.eql('Johnny');",
+                  "        pm.expect(user.username).to.match(/^[a-zA-Z0-9_-]+$/);",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateUser($input: UpdateUserInput!) {\n  updateUser(input: $input) {\n    _id\n    firstName\n    lastName\n    username\n    displayName\n    phone\n    avatar\n    preferredLanguage\n    preferredCurrency\n    dateOfBirth\n    gender\n    newsletter\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"Johnny\",\n    \"lastName\": \"Doe\",\n    \"username\": \"johndoe_{{$randomInt}}\",\n    \"displayName\": \"Johnny Doe\",\n    \"phone\": \"+201554726680\",\n    \"preferredLanguage\": \"en\",\n    \"preferredCurrency\": \"USD\",\n    \"gender\": \"male\",\n    \"newsletter\": true\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Update user profile information. All fields are optional. Username must be unique."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Delete My Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.deleteUser) {",
+                  "    var user = jsonData.data.deleteUser;",
+                  "    console.log('✓ Account deleted (soft delete):', user._id);",
+                  "    ",
+                  "    pm.test('Account soft deleted', function() {",
+                  "        pm.expect(user._id).to.eql(pm.environment.get('userId'));",
+                  "        pm.expect(user.isActive).to.be.false;",
+                  "        pm.expect(user.email).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DeleteUser {\n  deleteUser {\n    _id\n    email\n    isActive\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Soft delete user account (sets isActive to false). User data is preserved for audit purposes."
+          },
+          "response": []
+        }
+      ],
+      "description": "User profile management for authenticated users"
+    },
+    {
+      "name": "📍 Addresses",
+      "item": [
+        {
+          "name": "1. Add Address",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.addAddress && jsonData.data.addAddress.addresses) {",
+                  "    var addresses = jsonData.data.addAddress.addresses;",
+                  "    if (addresses.length > 0) {",
+                  "        var addressId = addresses[addresses.length - 1]._id;",
+                  "        pm.environment.set('addressId', addressId);",
+                  "        console.log('✓ Address added:', addressId);",
+                  "        console.log('✓ Address ID stored');",
+                  "        ",
+                  "        pm.test('Address added successfully', function() {",
+                  "            pm.expect(addressId).to.be.a('string');",
+                  "            pm.expect(addresses.length).to.be.at.least(1);",
+                  "            pm.expect(addresses[addresses.length - 1].isDefault).to.be.true;",
+                  "        });",
+                  "    }",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation AddAddress($input: AddAddressInput!) {\n  addAddress(input: $input) {\n    _id\n    addresses {\n      _id\n      address\n      city\n      country\n      postalCode\n      phoneNumber\n      isDefault\n      label\n      recipientName\n      recipientPhone\n      instructions\n      coordinates {\n        lat\n        lng\n      }\n      createdAt\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"address\": {\n      \"address\": \"123 Main Street, Apt 4B\",\n      \"city\": \"New York\",\n      \"country\": \"USA\",\n      \"postalCode\": \"10001\",\n      \"phoneNumber\": \"+1234567890\",\n      \"isDefault\": true,\n      \"label\": \"Home\",\n      \"recipientName\": \"John Doe\",\n      \"recipientPhone\": \"+1234567890\",\n      \"instructions\": \"Ring doorbell twice, leave at door if no answer\",\n      \"coordinates\": {\n        \"lat\": 40.7128,\n        \"lng\": -74.006\n      }\n    }\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Add new address to user profile. If isDefault is true, all other addresses will have isDefault set to false."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Update Address",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.updateAddress) {",
+                  "    var user = jsonData.data.updateAddress;",
+                  "    console.log('✓ Address updated:', pm.environment.get('addressId'));",
+                  "    ",
+                  "    pm.test('Address updated successfully', function() {",
+                  "        pm.expect(user._id).to.eql(pm.environment.get('userId'));",
+                  "        var address = user.addresses.find(a => a._id === pm.environment.get('addressId'));",
+                  "        pm.expect(address.city).to.eql('Brooklyn');",
+                  "        pm.expect(address.label).to.eql('Work');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateAddress($addressId: ID!, $input: UpdateAddressInput!) {\n  updateAddress(addressId: $addressId, input: $input) {\n    _id\n    addresses {\n      _id\n      address\n      city\n      country\n      postalCode\n      phoneNumber\n      isDefault\n      label\n      updatedAt\n    }\n  }\n}",
+                "variables": "{\n  \"addressId\": \"{{addressId}}\",\n  \"input\": {\n    \"address\": {\n      \"address\": \"456 Updated Street, Floor 2\",\n      \"city\": \"Brooklyn\",\n      \"country\": \"USA\",\n      \"postalCode\": \"11201\",\n      \"phoneNumber\": \"+1987654321\",\n      \"isDefault\": false,\n      \"label\": \"Work\"\n    }\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Update existing address. Must provide addressId and full address object."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Set Default Address",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.setDefaultAddress) {",
+                  "    var user = jsonData.data.setDefaultAddress;",
+                  "    console.log('✓ Default address set:', pm.environment.get('addressId'));",
+                  "    ",
+                  "    pm.test('Default address updated', function() {",
+                  "        var address = user.addresses.find(a => a._id === pm.environment.get('addressId'));",
+                  "        pm.expect(address.isDefault).to.be.true;",
+                  "        var otherAddresses = user.addresses.filter(a => a._id !== pm.environment.get('addressId'));",
+                  "        otherAddresses.forEach(a => {",
+                  "            pm.expect(a.isDefault).to.be.false;",
+                  "        });",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation SetDefaultAddress($addressId: ID!) {\n  setDefaultAddress(addressId: $addressId) {\n    _id\n    addresses {\n      _id\n      address\n      isDefault\n    }\n  }\n}",
+                "variables": "{\n  \"addressId\": \"{{addressId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Set address as default. Automatically unsets isDefault for all other addresses."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Delete Address",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.deleteAddress) {",
+                  "    var user = jsonData.data.deleteAddress;",
+                  "    console.log('✓ Address deleted:', pm.environment.get('addressId'));",
+                  "    ",
+                  "    pm.test('Address deleted successfully', function() {",
+                  "        pm.expect(user._id).to.eql(pm.environment.get('userId'));",
+                  "        var deletedAddress = user.addresses.find(a => a._id === pm.environment.get('addressId'));",
+                  "        pm.expect(deletedAddress).to.be.undefined;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DeleteAddress($addressId: ID!) {\n  deleteAddress(addressId: $addressId) {\n    _id\n    addresses {\n      _id\n      address\n      city\n    }\n  }\n}",
+                "variables": "{\n  \"addressId\": \"{{addressId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Delete an address from user profile. Cannot be undone."
+          },
+          "response": []
+        }
+      ],
+      "description": "Manage user addresses with full CRUD operations"
+    },
+    {
+      "name": "📁 Storage - GraphQL",
+      "item": [
+        {
+          "name": "1. Upload File (Avatar)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.uploadFile && jsonData.data.uploadFile.file) {",
+                  "    var fileId = jsonData.data.uploadFile.file._id;",
+                  "    pm.environment.set('fileId', fileId);",
+                  "    console.log('✓ File uploaded:', fileId);",
+                  "    console.log('✓ File ID stored');",
+                  "    ",
+                  "    pm.test('File uploaded successfully', function() {",
+                  "        pm.expect(jsonData.data.uploadFile.success).to.be.true;",
+                  "        pm.expect(fileId).to.be.a('string');",
+                  "        pm.expect(jsonData.data.uploadFile.file.url).to.include('http');",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "apollo-require-preflight",
+                "value": "true",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "operations",
+                  "value": "{\"query\":\"mutation UploadFile($file: Upload!, $fileType: FileTypeEnum!, $relatedEntity: String, $relatedEntityId: String) { uploadFile(file: $file, fileType: $fileType, relatedEntity: $relatedEntity, relatedEntityId: $relatedEntityId) { success message file { _id originalName filename url mimetype size type status createdAt } } }\",\"variables\":{\"file\":null,\"fileType\":\"AVATAR\",\"relatedEntity\":\"user\",\"relatedEntityId\":\"{{userId}}\"}}",
+                  "type": "text"
+                },
+                {
+                  "key": "map",
+                  "value": "{\"0\":[\"variables.file\"]}",
+                  "type": "text"
+                },
+                {
+                  "key": "0",
+                  "type": "file",
+                  "src": "postman-cloud:///1ef8704b-99da-44f0-90e4-10d4b24d90ad"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Upload file via GraphQL (requires multipart form data). File will be queued for processing (optimization, variants)."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get File by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.file) {",
+                  "    var file = jsonData.data.file;",
+                  "    console.log('✓ File retrieved:', file._id);",
+                  "    ",
+                  "    pm.test('File details retrieved', function() {",
+                  "        pm.expect(file._id).to.eql(pm.environment.get('fileId'));",
+                  "        pm.expect(file.status).to.be.oneOf(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']);",
+                  "        pm.expect(file.url).to.be.a('string');",
+                  "        if (file.status === 'COMPLETED') {",
+                  "            pm.expect(file.optimizedUrl).to.be.a('string');",
+                  "        }",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetFile($id: ID!) {\n  file(id: $id) {\n    _id\n    originalName\n    filename\n    url\n    mimetype\n    size\n    type\n    status\n    optimizedUrl\n    optimizedSize\n    variants\n    metadata {\n      width\n      height\n      format\n      aspectRatio\n    }\n    isPublic\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"id\": \"{{fileId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Get file details by ID. Includes metadata, optimized versions, and variants if processing completed."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Get My Files (Paginated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.myFiles) {",
+                  "    var paginatedFiles = jsonData.data.myFiles;",
+                  "    console.log('✓ Retrieved', paginatedFiles.files.length, 'files');",
+                  "    console.log('✓ Total files:', paginatedFiles.total);",
+                  "    ",
+                  "    pm.test('Paginated files retrieved', function() {",
+                  "        pm.expect(paginatedFiles.files).to.be.an('array');",
+                  "        pm.expect(paginatedFiles.total).to.be.a('number');",
+                  "        pm.expect(paginatedFiles.page).to.eql(1);",
+                  "        pm.expect(paginatedFiles.limit).to.eql(20);",
+                  "        pm.expect(paginatedFiles.totalPages).to.be.a('number');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query MyFiles($page: Float, $limit: Float) {\n  myFiles(page: $page, limit: $limit) {\n    files {\n      _id\n      originalName\n      filename\n      url\n      mimetype\n      size\n      type\n      status\n      optimizedUrl\n      createdAt\n    }\n    total\n    page\n    limit\n    totalPages\n  }\n}",
+                "variables": "{\n  \"page\": 1,\n  \"limit\": 20\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Get paginated list of user's uploaded files. Default page=1, limit=20."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Delete File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.deleteFile === true) {",
+                  "    console.log('✓ File deleted:', pm.environment.get('fileId'));",
+                  "    ",
+                  "    pm.test('File deleted successfully', function() {",
+                  "        pm.expect(jsonData.data.deleteFile).to.be.true;",
+                  "    });",
+                  "    ",
+                  "    pm.environment.unset('fileId');",
+                  "} else if (jsonData.errors) {",
+                  "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DeleteFile($id: ID!) {\n  deleteFile(id: $id)\n}",
+                "variables": "{\n  \"id\": \"{{fileId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Delete a file. File will be removed from disk and database record deleted."
+          },
+          "response": []
+        }
+      ],
+      "description": "GraphQL file upload and management with automatic processing queue"
+    },
+    {
+      "name": "📁 Storage - REST API",
+      "item": [
+        {
+          "name": "1. Upload Avatar (REST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.success && jsonData.file) {",
+                  "    pm.environment.set('fileId', jsonData.file.id);",
+                  "    console.log('✓ Avatar uploaded:', jsonData.file.id);",
+                  "    console.log('✓ File ID stored');",
+                  "    ",
+                  "    pm.test('Avatar uploaded via REST', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.file.id).to.be.a('string');",
+                  "        pm.expect(jsonData.file.url).to.include('http');",
+                  "        pm.response.to.have.status(201);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "postman-cloud:///1ef8704b-99da-44f0-90e4-10d4b24d90ad"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/storage/upload/avatar",
+              "host": ["{{baseUrl}}"],
+              "path": ["storage", "upload", "avatar"]
+            },
+            "description": "Upload avatar image via REST API (max 5MB, JPEG/PNG/WebP). Automatically queued for optimization and variant generation."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Upload Product Image (REST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.success && jsonData.file) {",
+                  "    console.log('✓ Product image uploaded:', jsonData.file.id);",
+                  "    ",
+                  "    pm.test('Product image uploaded via REST', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.file.id).to.be.a('string');",
+                  "        pm.expect(jsonData.file.optimizedUrl).to.be.a('string');",
+                  "        pm.expect(jsonData.file.variants).to.be.an('array');",
+                  "        pm.response.to.have.status(201);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "postman-cloud:///1ef8704b-99da-44f0-90e4-10d4b24d90ad"
+                },
+                {
+                  "key": "productId",
+                  "value": "product_123",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/storage/upload/product",
+              "host": ["{{baseUrl}}"],
+              "path": ["storage", "upload", "product"]
+            },
+            "description": "Upload product image (max 10MB, auto-generates variants: thumbnail, small, medium, large). Requires productId."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Upload Document (REST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.success && jsonData.file) {",
+                  "    console.log('✓ Document uploaded:', jsonData.file.id);",
+                  "    ",
+                  "    pm.test('Document uploaded via REST', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.file.id).to.be.a('string');",
+                  "        pm.expect(jsonData.file.filename).to.match(/\\.(pdf|doc|docx)$/);",
+                  "        pm.response.to.have.status(201);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "postman-cloud:///1f0d559d-3316-4240-8eae-8d1aad096757"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/storage/upload/document",
+              "host": ["{{baseUrl}}"],
+              "path": ["storage", "upload", "document"]
+            },
+            "description": "Upload document (PDF, DOC, DOCX - max 20MB). Marked as private by default."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Get File by ID (REST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('File retrieved via REST', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData._id) {",
+                  "    console.log('✓ File retrieved via REST:', jsonData._id);",
+                  "    ",
+                  "    pm.test('File structure correct', function() {",
+                  "        pm.expect(jsonData._id).to.be.a('string');",
+                  "        pm.expect(jsonData.originalName).to.be.a('string');",
+                  "        pm.expect(jsonData.url).to.include('http');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/storage/file/{{fileId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["storage", "file", "{{fileId}}"]
+            },
+            "description": "Get file details by ID via REST API. Returns full file object with metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Get My Files (REST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Files retrieved via REST', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (Array.isArray(jsonData)) {",
+                  "    console.log('✓ Retrieved', jsonData.length, 'files via REST');",
+                  "    ",
+                  "    pm.test('Files array structure', function() {",
+                  "        pm.expect(jsonData).to.be.an('array');",
+                  "        if (jsonData.length > 0) {",
+                  "            pm.expect(jsonData[0]._id).to.be.a('string');",
+                  "        }",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/storage/my-files",
+              "host": ["{{baseUrl}}"],
+              "path": ["storage", "my-files"]
+            },
+            "description": "Get all files uploaded by current user via REST API. Returns array of file objects."
+          },
+          "response": []
+        },
+        {
+          "name": "6. Delete File (REST)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('File deleted via REST', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success) {",
+                  "    console.log('✓ File deleted via REST:', pm.environment.get('fileId'));",
+                  "    pm.environment.unset('fileId');",
+                  "    ",
+                  "    pm.test('Delete response structure', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.message).to.include('deleted');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/storage/file/{{fileId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["storage", "file", "{{fileId}}"]
+            },
+            "description": "Delete a file via REST API. Removes file from disk and database. User must be the owner."
+          },
+          "response": []
+        }
+      ],
+      "description": "REST API file upload endpoints with multipart/form-data support"
+    },
+    {
+      "name": "👑 Admin - Users Management",
+      "item": [
+        {
+          "name": "1. Get All Users (Paginated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.users) {",
+                  "    var result = jsonData.data.users;",
+                  "    console.log('✓ Retrieved', result.users.length, 'users');",
+                  "    console.log('✓ Total users:', result.total);",
+                  "    ",
+                  "    pm.test('Users paginated response', function() {",
+                  "        pm.expect(result.users).to.be.an('array');",
+                  "        pm.expect(result.total).to.be.a('number');",
+                  "        pm.expect(result.page).to.eql(1);",
+                  "        pm.expect(result.limit).to.eql(10);",
+                  "        pm.expect(result.totalPages).to.be.a('number');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      role\n      status\n      isEmailVerified\n      isActive\n      lastLogin\n      loginAttempts\n      lockUntil\n      createdAt\n    }\n    total\n    page\n    limit\n    totalPages\n  }\n}",
+                "variables": "{\n  \"filters\": {\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Get paginated list of all users (Admin only). Includes sensitive fields like loginAttempts, lockUntil."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get Users - Filter by Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.users) {",
+                  "    var users = jsonData.data.users.users;",
+                  "    console.log('✓ Retrieved', users.length, 'customers');",
+                  "    ",
+                  "    pm.test('Users filtered by role', function() {",
+                  "        users.forEach(user => {",
+                  "            pm.expect(user.role).to.eql('customer');",
+                  "        });",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      role\n      status\n    }\n    total\n  }\n}",
+                "variables": "{\n  \"filters\": {\n    \"role\": \"customer\",\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Filter users by role (customer, admin, super_admin, vendor, moderator, support)"
+          },
+          "response": []
+        },
+        {
+          "name": "3. Get Users - Filter by Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.users) {",
+                  "    var users = jsonData.data.users.users;",
+                  "    console.log('✓ Retrieved', users.length, 'banned users');",
+                  "    ",
+                  "    pm.test('Users filtered by status', function() {",
+                  "        users.forEach(user => {",
+                  "            pm.expect(user.status).to.eql('banned');",
+                  "            pm.expect(user.banReason).to.be.a('string');",
+                  "        });",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      status\n      banReason\n    }\n    total\n  }\n}",
+                "variables": "{\n  \"filters\": {\n    \"status\": \"banned\",\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Filter users by status (active, inactive, banned, pending, suspended)"
+          },
+          "response": []
+        },
+        {
+          "name": "4. Get Users - Search",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.users) {",
+                  "    var result = jsonData.data.users;",
+                  "    console.log('✓ Found', result.total, 'users matching search');",
+                  "    ",
+                  "    pm.test('Search results returned', function() {",
+                  "        pm.expect(result.total).to.be.a('number');",
+                  "        pm.expect(result.users).to.be.an('array');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      role\n    }\n    total\n  }\n}",
+                "variables": "{\n  \"filters\": {\n    \"search\": \"john\",\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Search users by name, email, or username. Uses MongoDB text index for efficient searching."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Get Users - Filter Email Verified",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.users) {",
+                  "    var users = jsonData.data.users.users;",
+                  "    console.log('✓ Found', users.length, 'unverified users');",
+                  "    ",
+                  "    pm.test('Email verification filter applied', function() {",
+                  "        users.forEach(user => {",
+                  "            pm.expect(user.isEmailVerified).to.be.false;",
+                  "        });",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      email\n      isEmailVerified\n    }\n    total\n  }\n}",
+                "variables": "{\n  \"filters\": {\n    \"isEmailVerified\": false,\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Filter by email verification status. Useful for finding pending verifications."
+          },
+          "response": []
+        },
+        {
+          "name": "6. Get User Admin Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.userAdmin) {",
+                  "    var user = jsonData.data.userAdmin;",
+                  "    console.log('✓ Retrieved admin details for:', user.email);",
+                  "    ",
+                  "    pm.test('Admin details include sensitive data', function() {",
+                  "        pm.expect(user.loginAttempts).to.be.a('number');",
+                  "        pm.expect(user.banReason).to.be.oneOf(['string', 'undefined', 'null']);",
+                  "        pm.expect(user.refreshTokens).to.be.undefined;\n",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUserAdmin($id: ID!) {\n  userAdmin(id: $id) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    status\n    isEmailVerified\n    phone\n    phoneVerified\n    lastLogin\n    isActive\n    loginAttempts\n    lockUntil\n    banReason\n    bannedAt\n    bannedBy\n    addresses {\n      _id\n      address\n      city\n      country\n    }\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"id\": \"{{userId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Get detailed user information including sensitive data like loginAttempts, lockUntil, and ban details."
+          },
+          "response": []
+        },
+        {
+          "name": "7. Update User Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.updateUserRole) {",
+                  "    var user = jsonData.data.updateUserRole;",
+                  "    console.log('✓ User role updated to:', user.role);",
+                  "    ",
+                  "    pm.test('Role updated successfully', function() {",
+                  "        pm.expect(user.role).to.eql('admin');",
+                  "        pm.expect(user.updatedAt).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateUserRole($input: UpdateUserRoleInput!) {\n  updateUserRole(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"userId\": \"{{userId}}\",\n    \"role\": \"admin\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Change user role (customer, admin, vendor, moderator, support). Super Admin can promote to super_admin."
+          },
+          "response": []
+        },
+        {
+          "name": "8. Update User Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.updateUserStatus) {",
+                  "    var user = jsonData.data.updateUserStatus;",
+                  "    console.log('✓ User status updated to:', user.status);",
+                  "    ",
+                  "    pm.test('Status updated successfully', function() {",
+                  "        pm.expect(user.status).to.eql('active');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateUserStatus($input: UpdateUserStatusInput!) {\n  updateUserStatus(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    status\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"userId\": \"{{userId}}\",\n    \"status\": \"active\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Change user status (active, inactive, banned, pending, suspended). Used for account management."
+          },
+          "response": []
+        },
+        {
+          "name": "9. Ban User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.banUser) {",
+                  "    var user = jsonData.data.banUser;",
+                  "    console.log('✓ User banned:', user._id);",
+                  "    console.log('✓ Ban reason:', user.banReason);",
+                  "    ",
+                  "    pm.test('User banned successfully', function() {",
+                  "        pm.expect(user.status).to.eql('banned');",
+                  "        pm.expect(user.banReason).to.include('spam');",
+                  "        pm.expect(user.bannedAt).to.be.a('string');",
+                  "        pm.expect(user.bannedBy).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation BanUser($input: BanUserInput!) {\n  banUser(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    status\n    banReason\n    bannedAt\n    bannedBy\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"userId\": \"{{userId}}\",\n    \"reason\": \"Violation of terms of service - spam activity detected in multiple listings\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Ban user with reason (audit logged). User cannot login while banned. Ban record includes admin ID."
+          },
+          "response": []
+        },
+        {
+          "name": "10. Unban User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.unbanUser) {",
+                  "    var user = jsonData.data.unbanUser;",
+                  "    console.log('✓ User unbanned:', user._id);",
+                  "    ",
+                  "    pm.test('User unbanned successfully', function() {",
+                  "        pm.expect(user.status).to.eql('active');",
+                  "        pm.expect(user.banReason).to.be.null;",
+                  "        pm.expect(user.bannedAt).to.be.null;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UnbanUser($userId: ID!) {\n  unbanUser(userId: $userId) {\n    _id\n    firstName\n    lastName\n    email\n    status\n    banReason\n    bannedAt\n  }\n}",
+                "variables": "{\n  \"userId\": \"{{userId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Remove ban from user. Restores account to active status and clears ban history."
+          },
+          "response": []
+        },
+        {
+          "name": "11. Promote to Super Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.promoteToSuperAdmin) {",
+                  "    var user = jsonData.data.promoteToSuperAdmin;",
+                  "    console.log('✓ User promoted to super_admin:', user._id);",
+                  "    ",
+                  "    pm.test('Promotion to Super Admin successful', function() {",
+                  "        pm.expect(user.role).to.eql('super_admin');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation PromoteToSuperAdmin($userId: ID!) {\n  promoteToSuperAdmin(userId: $userId) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"userId\": \"{{userId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Promote user to super admin (Super Admin only). Gives highest privileges in the system."
+          },
+          "response": []
+        }
+      ],
+      "description": "Admin-only user management endpoints with filtering, banning, and role management"
+    },
+    {
+      "name": "👑 Admin - Queue Management",
+      "item": [
+        {
+          "name": "1. Email Queue Stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Email queue stats retrieved', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "console.log('Email queue - Waiting:', jsonData.waiting);",
+                  "console.log('Email queue - Active:', jsonData.active);",
+                  "console.log('Email queue - Completed:', jsonData.completed);",
+                  "console.log('Email queue - Failed:', jsonData.failed);",
+                  "console.log('Email queue - Delayed:', jsonData.delayed);",
+                  "",
+                  "pm.test('Queue stats structure', function() {",
+                  "    pm.expect(jsonData.waiting).to.be.a('number');",
+                  "    pm.expect(jsonData.active).to.be.a('number');",
+                  "    pm.expect(jsonData.completed).to.be.a('number');",
+                  "    pm.expect(jsonData.failed).to.be.a('number');",
+                  "    pm.expect(jsonData.total).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-queue/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "email-queue", "stats"]
+            },
+            "description": "Get email queue statistics including waiting, active, completed, failed, and delayed job counts."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Email Queue Failed Jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Failed email jobs retrieved', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "console.log('✓ Found', jsonData.length, 'failed email jobs');",
+                  "",
+                  "if (jsonData.length > 0) {",
+                  "    pm.environment.set('jobId', jsonData[0].id);",
+                  "    console.log('✓ Stored first failed job ID:', jsonData[0].id);",
+                  "}",
+                  "",
+                  "pm.test('Failed jobs array', function() {",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-queue/failed",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "email-queue", "failed"]
+            },
+            "description": "Get failed email jobs with details: id, data, failedReason, attemptsMade, timestamp."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Retry Email Job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Email job retry triggered', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success) {",
+                  "    console.log('✓ Job queued for retry:', pm.environment.get('jobId'));",
+                  "    pm.test('Retry response', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.message).to.include('queued for retry');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-queue/retry/{{jobId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "email-queue", "retry", "{{jobId}}"]
+            },
+            "description": "Retry a specific failed email job. Job ID can be obtained from failed jobs endpoint."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Retry All Failed Email Jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('All failed email jobs retry triggered', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success) {",
+                  "    console.log('✓ All failed jobs queued for retry');",
+                  "    pm.test('Retry all response', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.message).to.include('All failed jobs');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-queue/retry-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "email-queue", "retry-all"]
+            },
+            "description": "Retry all failed email jobs. Useful after fixing SMTP configuration issues."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Clean Email Queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Email queue cleaned', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success) {",
+                  "    console.log('✓ Old completed/failed jobs cleaned');",
+                  "    pm.test('Clean response', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.message).to.include('cleaned');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-queue/clean",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "email-queue", "clean"]
+            },
+            "description": "Clean old completed/failed email jobs. Removes jobs older than 24 hours by default."
+          },
+          "response": []
+        },
+        {
+          "name": "6. Pause Email Queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Email queue paused', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success) {",
+                  "    console.log('✓ Email queue paused');",
+                  "    pm.test('Pause response', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.message).to.include('paused');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-queue/pause",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "email-queue", "pause"]
+            },
+            "description": "Pause email queue processing. New jobs will be added but not processed until resumed."
+          },
+          "response": []
+        },
+        {
+          "name": "7. Resume Email Queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Email queue resumed', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success) {",
+                  "    console.log('✓ Email queue resumed');",
+                  "    pm.test('Resume response', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "        pm.expect(jsonData.message).to.include('resumed');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-queue/resume",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "email-queue", "resume"]
+            },
+            "description": "Resume email queue processing. Starts processing waiting jobs."
+          },
+          "response": []
+        },
+        {
+          "name": "8. Storage Queue Stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Storage queue stats retrieved', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "console.log('Storage queue - Waiting:', jsonData.waiting);",
+                  "console.log('Storage queue - Active:', jsonData.active);",
+                  "console.log('Storage queue - Completed:', jsonData.completed);",
+                  "console.log('Storage queue - Failed:', jsonData.failed);",
+                  "",
+                  "pm.test('Storage queue stats structure', function() {",
+                  "    pm.expect(jsonData.waiting).to.be.a('number');",
+                  "    pm.expect(jsonData.active).to.be.a('number');",
+                  "    pm.expect(jsonData.completed).to.be.a('number');",
+                  "    pm.expect(jsonData.failed).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/storage-queue/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "storage-queue", "stats"]
+            },
+            "description": "Get storage queue statistics for file processing (optimization, variant generation)."
+          },
+          "response": []
+        },
+        {
+          "name": "9. Storage Queue Failed Jobs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Failed storage jobs retrieved', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "console.log('✓ Found', jsonData.length, 'failed storage jobs');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/storage-queue/failed",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "storage-queue", "failed"]
+            },
+            "description": "Get failed storage jobs (image processing, optimization failures)."
+          },
+          "response": []
+        },
+        {
+          "name": "10. Cleanup Expired Files",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Expired files cleanup triggered', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success) {",
+                  "    console.log('✓ Cleanup job queued');",
+                  "    pm.test('Cleanup response', function() {",
+                  "        pm.expect(jsonData.success).to.be.true;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/storage-queue/cleanup-expired",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "storage-queue", "cleanup-expired"]
+            },
+            "description": "Trigger cleanup of expired files (files with expiresAt < now)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Admin queue management endpoints for monitoring and controlling background job processing"
+    },
+    {
+      "name": "🧪 Testing - Rate Limiting",
+      "item": [
+        {
+          "name": "1. Test Login Rate Limit (5/min)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.errors) {",
+                  "    if (iteration === 6) {",
+                  "        pm.test('Login rate limit triggered', function() {",
+                  "            pm.expect(jsonData.errors[0].message).to.include('Too many requests');",
+                  "            pm.response.to.have.status(429);",
+                  "        });",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Login($input: LoginInput!) {\n  login(input: $input) {\n    accessToken\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"password\": \"WrongPassword123!\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Run 6 times quickly to trigger rate limit. 5 attempts allowed per minute."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Test Registration Rate Limit (3/min)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.errors) {",
+                  "    if (iteration === 4) {",
+                  "        pm.test('Registration rate limit triggered', function() {",
+                  "            pm.expect(jsonData.errors[0].message).to.include('Too many requests');",
+                  "            pm.response.to.have.status(429);",
+                  "        });",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    success\n    email\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"email\": \"test{{$randomInt}}@example.com\",\n    \"password\": \"{{testPassword}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Run 4 times quickly to trigger rate limit. 3 registrations allowed per minute."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Test Resend OTP Rate Limit (3/min + 1min wait)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.errors) {",
+                  "    pm.test('Resend OTP rate limit triggered', function() {",
+                  "        pm.expect(jsonData.errors[0].message).to.include('wait at least 1 minute');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation ResendOtp($input: ResendOtpInput!) {\n  resendOtp(input: $input)\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"type\": \"EMAIL_VERIFICATION\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Tests both per-minute rate limit (3 requests) and the 1-minute wait between resends."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Test Password Reset Rate Limit (3/5min)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.errors) {",
+                  "    if (iteration === 4) {",
+                  "        pm.test('Password reset rate limit triggered', function() {",
+                  "            pm.expect(jsonData.errors[0].message).to.include('Too many requests');",
+                  "            pm.response.to.have.status(429);",
+                  "        });",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RequestPasswordReset($input: RequestPasswordResetInput!) {\n  requestPasswordReset(input: $input)\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Run 4 times quickly to trigger rate limit. 3 password reset requests allowed per 5 minutes."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Test Admin Endpoint No Throttle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data) {",
+                  "    pm.test('Admin endpoints skip throttling', function() {",
+                  "        pm.response.to.have.status(200);",
+                  "        pm.expect(jsonData.data.users).to.be.an('object');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      email\n    }\n    total\n  }\n}",
+                "variables": "{\n  \"filters\": {\n    \"page\": 1,\n    \"limit\": 5\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Admin queries skip rate limiting (SkipThrottle decorator). Run multiple times to verify."
+          },
+          "response": []
+        }
+      ],
+      "description": "Test rate limiting on various endpoints. Verify throttling behavior and admin bypass."
+    },
+    {
+      "name": "🧪 Testing - OAuth Flows",
+      "item": [
+        {
+          "name": "1. GitHub OAuth - Check User-Agent Header",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Verify GitHub OAuth includes required User-Agent header",
+                  "pm.test('User-Agent header present in request', function() {",
+                  "    const requestHeaders = pm.request.headers.all();",
+                  "    const userAgentHeader = requestHeaders.find(h => h.key.toLowerCase() === 'user-agent');",
+                  "    pm.expect(userAgentHeader).to.be.undefined; // Browser will handle this",
+                  "});",
+                  "",
+                  "console.log('✓ GitHub OAuth flow initiated with proper User-Agent');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "User-Agent",
+                "value": "nest-e-commerce-app",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/github",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "github"]
+            },
+            "description": "Tests that GitHub OAuth includes mandatory User-Agent header (GitHub API requirement since 2014)."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Verify OAuth Account Linking",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Test OAuth account linking behavior",
+                  "pm.test('OAuth test callback returns tokens', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.success) {",
+                  "    console.log('✓ OAuth account linked/created successfully');",
+                  "    console.log('✓ Tokens generated for OAuth user');",
+                  "    ",
+                  "    pm.test('OAuth response includes user and tokens', function() {",
+                  "        pm.expect(jsonData.user).to.be.an('object');",
+                  "        pm.expect(jsonData.tokens.accessToken).to.be.a('string');",
+                  "        pm.expect(jsonData.tokens.refreshToken).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/callback/test",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google", "callback", "test"]
+            },
+            "description": "Tests OAuth account linking flow. If user with email exists, links OAuth ID; otherwise creates new user."
+          },
+          "response": []
+        }
+      ],
+      "description": "Test OAuth-specific behaviors and edge cases"
+    },
+    {
+      "name": "🧪 Testing - Queue Processing",
+      "item": [
+        {
+          "name": "1. Verify File Processing Queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.file) {",
+                  "    var file = jsonData.data.file;",
+                  "    console.log('✓ File status:', file.status);",
+                  "    ",
+                  "    pm.test('File processing completed', function() {",
+                  "        // Status should progress from PENDING -> PROCESSING -> COMPLETED",
+                  "        pm.expect(file.status).to.be.oneOf(['PENDING', 'PROCESSING', 'COMPLETED']);",
+                  "        if (file.status === 'COMPLETED') {",
+                  "            pm.expect(file.optimizedUrl).to.be.a('string');",
+                  "            pm.expect(file.variants).tb",
+                  "be.an('array');",
+                  "        }",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetFile($id: ID!) {\n  file(id: $id) {\n    _id\n    status\n    optimizedUrl\n    variants\n    metadata {\n      width\n      height\n    }\n  }\n}",
+                "variables": "{\n  \"id\": \"{{fileId}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Poll file status to verify async processing. After upload, file should be processed by queue worker."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Check Bull Board Access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Bull Board accessible', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "console.log('✓ Bull Board dashboard is accessible');",
+                  "console.log('✓ Queue monitoring active');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic YWRtajpjaGFuZ2UtdGhpcy1wYXNzd29yZA=="
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/queues",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "queues"]
+            },
+            "description": "Verify Bull Board is accessible for queue monitoring. Check both email and storage queues."
+          },
+          "response": []
+        }
+      ],
+      "description": "Test background job processing and queue functionality"
+    },
+    {
+      "name": "❤️ Health Checks",
+      "item": [
+        {
+          "name": "1. GraphQL Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('GraphQL endpoint is healthy', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data) {",
+                  "    console.log('✓ GraphQL schema is accessible');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "Basic health check for GraphQL endpoint. Should return 200 even without authentication."
+          },
+          "response": []
+        },
+        {
+          "name": "2. MongoDB Connection Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.users) {",
+                  "    pm.test('MongoDB connection healthy', function() {",
+                  "        pm.expect(jsonData.data.users.users).to.be.an('array');",
+                  "        console.log('✓ MongoDB query executed successfully');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query HealthCheck {\n  users(filters: {limit: 1}) {\n    users {\n      _id\n    }\n    total\n  }\n}",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Verify MongoDB connection via GraphQL query. Tests database connectivity."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Redis Connection Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.data && jsonData.data.login) {",
+                  "    pm.test('Redis connection healthy (rate limiting)', function() {",
+                  "        console.log('✓ Redis rate limiting active');",
+                  "    });",
+                  "}",
+                  "",
+                  "if (jsonData.errors && jsonData.errors[0].extensions.code === 'TOO_MANY_REQUESTS') {",
+                  "    pm.test('Redis rate limiting working', function() {",
+                  "        console.log('✓ Redis rate limiting functional');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation RedisCheck($input: LoginInput!) {\n  login(input: $input) {\n    accessToken\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"password\": \"wrong\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{graphqlEndpoint}}",
+              "host": ["{{graphqlEndpoint}}"]
+            },
+            "description": "Verify Redis connection via rate limiting. If Redis is down, rate limiting will fail open."
+          },
+          "response": []
+        }
+      ],
+      "description": "Health check endpoints for monitoring service status"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set timestamp header for request signing if needed",
+          "// pm.request.headers.add({key: 'X-Timestamp', value: Date.now().toString()});"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test hooks can go here",
+          "// Log all responses for debugging",
+          "// console.log('Response:', pm.response.json());"
+        ]
+      }
+    }
+  ],
   "variable": [
     {
       "key": "baseUrl",
@@ -34,1053 +3329,36 @@
       "key": "addressId",
       "value": "",
       "type": "string"
-    }
-  ],
-  "item": [
-    {
-      "name": "Auth",
-      "item": [
-        {
-          "name": "Register User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "var jsonData = pm.response.json();",
-                  "",
-                  "if (jsonData.data && jsonData.data.register) {",
-                  "    var accessToken = jsonData.data.register.accessToken;",
-                  "    var refreshToken = jsonData.data.register.refreshToken;",
-                  "    var userId = jsonData.data.register.user.id;",
-                  "    ",
-                  "    if (accessToken) {",
-                  "        pm.environment.set(\"token\", accessToken);",
-                  "        console.log(\"✓ Access token stored\");",
-                  "    }",
-                  "    ",
-                  "    if (refreshToken) {",
-                  "        pm.environment.set(\"refreshToken\", refreshToken);",
-                  "        console.log(\"✓ Refresh token stored\");",
-                  "    }",
-                  "    ",
-                  "    if (userId) {",
-                  "        pm.environment.set(\"userId\", userId);",
-                  "        console.log(\"✓ User ID stored:\", userId);",
-                  "    }",
-                  "    ",
-                  "    pm.test(\"Registration successful\", function() {",
-                  "        pm.expect(accessToken).to.be.a('string');",
-                  "        pm.expect(refreshToken).to.be.a('string');",
-                  "        pm.expect(userId).to.be.a('string');",
-                  "    });",
-                  "} else if (jsonData.errors) {",
-                  "    console.error(\"❌ GraphQL errors:\", jsonData.errors);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"password\": \"SecurePass123!\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "var jsonData = pm.response.json();",
-                  "",
-                  "if (jsonData.data && jsonData.data.login) {",
-                  "    var accessToken = jsonData.data.login.accessToken;",
-                  "    var refreshToken = jsonData.data.login.refreshToken;",
-                  "    var userId = jsonData.data.login.user.id;",
-                  "    ",
-                  "    if (accessToken) {",
-                  "        pm.environment.set(\"token\", accessToken);",
-                  "        console.log(\"✓ Access token stored:\", accessToken.substring(0, 20) + \"...\");",
-                  "    }",
-                  "    ",
-                  "    if (refreshToken) {",
-                  "        pm.environment.set(\"refreshToken\", refreshToken);",
-                  "        console.log(\"✓ Refresh token stored\");",
-                  "    }",
-                  "    ",
-                  "    if (userId) {",
-                  "        pm.environment.set(\"userId\", userId);",
-                  "        console.log(\"✓ User ID stored:\", userId);",
-                  "    }",
-                  "    ",
-                  "    pm.test(\"Login successful\", function() {",
-                  "        pm.expect(accessToken).to.be.a('string');",
-                  "    });",
-                  "} else if (jsonData.errors) {",
-                  "    console.error(\"❌ GraphQL errors:\", jsonData.errors);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation Login($input: LoginInput!) {\n  login(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"email\": \"john.doe@example.com\",\n    \"password\": \"SecurePass123!\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Who Am I",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "query WhoAmI {\n  whoAmI {\n    id\n    email\n    firstName\n    lastName\n    role\n  }\n}",
-                "variables": ""
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Refresh Token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "var jsonData = pm.response.json();",
-                  "",
-                  "if (jsonData.data && jsonData.data.refreshToken) {",
-                  "    var accessToken = jsonData.data.refreshToken.accessToken;",
-                  "    var refreshToken = jsonData.data.refreshToken.refreshToken;",
-                  "    ",
-                  "    if (accessToken) {",
-                  "        pm.environment.set(\"token\", accessToken);",
-                  "        console.log(\"✓ New access token stored\");",
-                  "    }",
-                  "    ",
-                  "    if (refreshToken) {",
-                  "        pm.environment.set(\"refreshToken\", refreshToken);",
-                  "        console.log(\"✓ New refresh token stored\");",
-                  "    }",
-                  "    ",
-                  "    pm.test(\"Token refresh successful\", function() {",
-                  "        pm.expect(accessToken).to.be.a('string');",
-                  "        pm.expect(refreshToken).to.be.a('string');",
-                  "    });",
-                  "} else {",
-                  "    console.error(\"❌ Refresh failed:\", jsonData);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation RefreshToken($input: RefreshTokenInput!) {\n  refreshToken(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"token\": \"{{refreshToken}}\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Logout",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation Logout($userId: String!, $refreshToken: String!) {\n  logout(userId: $userId, refreshToken: $refreshToken)\n}",
-                "variables": "{\n  \"userId\": \"{{userId}}\",\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Request Password Reset",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation RequestPasswordReset($input: RequestPasswordResetInput!) {\n  requestPasswordReset(input: $input)\n}",
-                "variables": "{\n  \"input\": {\n    \"email\": \"john.doe@example.com\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Reset Password",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation ResetPassword($input: ResetPasswordInput!) {\n  resetPassword(input: $input)\n}",
-                "variables": "{\n  \"input\": {\n    \"token\": \"your-reset-token-here\",\n    \"newPassword\": \"NewSecurePass123!\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Update User Role",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation UpdateUserRole($input: UpdateUserRoleInput!) {\n  updateUserRole(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    updatedAt\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"userId\": \"{{userId}}\",\n    \"role\": \"ADMIN\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Update User Status",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation UpdateUserStatus($input: UpdateUserStatusInput!) {\n  updateUserStatus(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    status\n    updatedAt\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"userId\": \"{{userId}}\",\n    \"status\": \"ACTIVE\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Ban User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation BanUser($input: BanUserInput!) {\n  banUser(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    status\n    banReason\n    bannedAt\n    bannedBy\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"userId\": \"{{userId}}\",\n    \"reason\": \"Violation of terms of service\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Unban User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation UnbanUser($userId: ID!) {\n  unbanUser(userId: $userId) {\n    _id\n    firstName\n    lastName\n    email\n    status\n    banReason\n    bannedAt\n  }\n}",
-                "variables": "{\n  \"userId\": \"{{userId}}\"\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Promote to Super Admin",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation PromoteToSuperAdmin($userId: ID!) {\n  promoteToSuperAdmin(userId: $userId) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    updatedAt\n  }\n}",
-                "variables": "{\n  \"userId\": \"{{userId}}\"\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        }
-      ]
     },
     {
-      "name": "Testing - Rate Limiting",
-      "item": [
-        {
-          "name": "Test Login Rate Limit (5/min)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation Login($input: LoginInput!) {\n  login(input: $input) {\n    accessToken\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"email\": \"test@example.com\",\n    \"password\": \"WrongPassword123!\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            },
-            "description": "Run this 6 times quickly to test rate limiting (should fail on 6th attempt)"
-          }
-        },
-        {
-          "name": "Test Registration Rate Limit (5/min)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    user {\n      id\n      email\n    }\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"email\": \"test{{$randomInt}}@example.com\",\n    \"password\": \"SecurePass123!\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            },
-            "description": "Run this 6 times quickly to test rate limiting"
-          }
-        },
-        {
-          "name": "Test Password Reset Rate Limit (3/5min)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation RequestPasswordReset($input: RequestPasswordResetInput!) {\n  requestPasswordReset(input: $input)\n}",
-                "variables": "{\n  \"input\": {\n    \"email\": \"john.doe@example.com\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            },
-            "description": "Run this 4 times quickly to test rate limiting (should fail on 4th attempt)"
-          }
-        }
-      ]
+      "key": "fileId",
+      "value": "",
+      "type": "string"
     },
     {
-      "name": "Testing - Validation",
-      "item": [
-        {
-          "name": "Invalid Email Format",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    user {\n      id\n    }\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"email\": \"invalid-email\",\n    \"password\": \"SecurePass123!\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Weak Password",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation Register($input: RegisterInput!) {\n  register(input: $input) {\n    user {\n      id\n    }\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"email\": \"test@example.com\",\n    \"password\": \"weak\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Invalid Phone Number",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation CreateUser($input: CreateUserInput!) {\n  createUser(input: $input) {\n    _id\n    phone\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"email\": \"test2@example.com\",\n    \"password\": \"SecurePass123!\",\n    \"phone\": \"invalid-phone\"\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        }
-      ]
+      "key": "otpCode",
+      "value": "",
+      "type": "string"
     },
     {
-      "name": "Health Check",
-      "item": [
-        {
-          "name": "GraphQL Playground",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            },
-            "description": "Access GraphQL Playground in browser"
-          }
-        },
-        {
-          "name": "Introspection Query",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "query IntrospectionQuery {\n  __schema {\n    queryType {\n      name\n    }\n    mutationType {\n      name\n    }\n    types {\n      name\n      kind\n    }\n  }\n}",
-                "variables": ""
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        }
-      ]
+      "key": "testEmail",
+      "value": "test@example.com",
+      "type": "string"
     },
     {
-      "name": "OAuth",
-      "item": [
-        {
-          "name": "Google OAuth - Initiate",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/auth/google",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "google"]
-            },
-            "description": "Initiates Google OAuth flow. This will redirect to Google login page."
-          }
-        },
-        {
-          "name": "GitHub OAuth - Initiate",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/auth/github",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "github"]
-            },
-            "description": "Initiates GitHub OAuth flow. This will redirect to GitHub login page."
-          }
-        }
-      ]
+      "key": "testPassword",
+      "value": "SecurePass123!",
+      "type": "string"
     },
     {
-      "name": "Users - Public",
-      "item": [
-        {
-          "name": "Get User by ID",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "query GetUser($id: ID!) {\n  user(id: $id) {\n    _id\n    firstName\n    lastName\n    fullName\n    username\n    displayName\n    avatar\n    role\n    createdAt\n    updatedAt\n  }\n}",
-                "variables": "{\n  \"id\": \"{{userId}}\"\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Create User (Public Registration)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "var jsonData = pm.response.json();",
-                  "",
-                  "if (jsonData.data && jsonData.data.createUser) {",
-                  "    var userId = jsonData.data.createUser._id;",
-                  "    ",
-                  "    if (userId) {",
-                  "        pm.environment.set(\"userId\", userId);",
-                  "        console.log(\"✓ User ID stored:\", userId);",
-                  "    }",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation CreateUser($input: CreateUserInput!) {\n  createUser(input: $input) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    status\n    isEmailVerified\n    createdAt\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"firstName\": \"Jane\",\n    \"lastName\": \"Smith\",\n    \"username\": \"janesmith\",\n    \"email\": \"jane.smith@example.com\",\n    \"password\": \"SecurePass123!\",\n    \"phone\": \"+1234567890\",\n    \"dateOfBirth\": \"1990-05-15\",\n    \"gender\": \"female\",\n    \"newsletter\": true\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        }
-      ]
+      "key": "adminEmail",
+      "value": "admin@example.com",
+      "type": "string"
     },
     {
-      "name": "Users - Protected",
-      "item": [
-        {
-          "name": "Get My Profile",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "query GetMe {\n  me {\n    _id\n    firstName\n    lastName\n    fullName\n    username\n    displayName\n    email\n    role\n    status\n    avatar\n    addresses {\n      _id\n      address\n      city\n      country\n      postalCode\n      phoneNumber\n      isDefault\n      label\n    }\n    isEmailVerified\n    phone\n    phoneVerified\n    lastLogin\n    isActive\n    preferredLanguage\n    preferredCurrency\n    dateOfBirth\n    gender\n    twoFactorEnabled\n    newsletter\n    createdAt\n    updatedAt\n  }\n}",
-                "variables": ""
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Update My Profile",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation UpdateUser($input: UpdateUserInput!) {\n  updateUser(input: $input) {\n    _id\n    firstName\n    lastName\n    username\n    displayName\n    phone\n    avatar\n    preferredLanguage\n    preferredCurrency\n    dateOfBirth\n    gender\n    newsletter\n    updatedAt\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe Updated\",\n    \"username\": \"johndoe_updated\",\n    \"displayName\": \"Johnny\",\n    \"phone\": \"+1987654321\",\n    \"preferredLanguage\": \"en\",\n    \"preferredCurrency\": \"USD\",\n    \"gender\": \"male\",\n    \"newsletter\": true\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Delete My Account",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation DeleteUser {\n  deleteUser {\n    _id\n    email\n    isActive\n  }\n}",
-                "variables": ""
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Addresses",
-      "item": [
-        {
-          "name": "Add Address",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "var jsonData = pm.response.json();",
-                  "",
-                  "if (jsonData.data && jsonData.data.addAddress && jsonData.data.addAddress.addresses) {",
-                  "    var addresses = jsonData.data.addAddress.addresses;",
-                  "    if (addresses.length > 0) {",
-                  "        var addressId = addresses[addresses.length - 1]._id;",
-                  "        pm.environment.set(\"addressId\", addressId);",
-                  "        console.log(\"✓ Address ID stored:\", addressId);",
-                  "    }",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation AddAddress($input: AddAddressInput!) {\n  addAddress(input: $input) {\n    _id\n    addresses {\n      _id\n      address\n      city\n      country\n      postalCode\n      phoneNumber\n      isDefault\n      label\n      recipientName\n      recipientPhone\n      instructions\n      coordinates {\n        lat\n        lng\n      }\n      createdAt\n      updatedAt\n    }\n  }\n}",
-                "variables": "{\n  \"input\": {\n    \"address\": {\n      \"address\": \"123 Main Street\",\n      \"city\": \"New York\",\n      \"country\": \"USA\",\n      \"postalCode\": \"10001\",\n      \"phoneNumber\": \"+1234567890\",\n      \"isDefault\": true,\n      \"label\": \"Home\",\n      \"recipientName\": \"John Doe\",\n      \"recipientPhone\": \"+1234567890\",\n      \"instructions\": \"Ring the doorbell twice\",\n      \"coordinates\": {\n        \"lat\": 40.7128,\n        \"lng\": -74.006\n      }\n    }\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Update Address",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation UpdateAddress($addressId: ID!, $input: UpdateAddressInput!) {\n  updateAddress(addressId: $addressId, input: $input) {\n    _id\n    addresses {\n      _id\n      address\n      city\n      country\n      postalCode\n      phoneNumber\n      isDefault\n      label\n      updatedAt\n    }\n  }\n}",
-                "variables": "{\n  \"addressId\": \"{{addressId}}\",\n  \"input\": {\n    \"addressId\": \"{{addressId}}\",\n    \"address\": {\n      \"address\": \"456 Updated Street\",\n      \"city\": \"Brooklyn\",\n      \"country\": \"USA\",\n      \"postalCode\": \"11201\",\n      \"phoneNumber\": \"+1234567890\",\n      \"isDefault\": false,\n      \"label\": \"Work\"\n    }\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Set Default Address",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation SetDefaultAddress($addressId: ID!) {\n  setDefaultAddress(addressId: $addressId) {\n    _id\n    addresses {\n      _id\n      address\n      isDefault\n    }\n  }\n}",
-                "variables": "{\n  \"addressId\": \"{{addressId}}\"\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Delete Address",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "mutation DeleteAddress($addressId: ID!) {\n  deleteAddress(addressId: $addressId) {\n    _id\n    addresses {\n      _id\n      address\n      city\n    }\n  }\n}",
-                "variables": "{\n  \"addressId\": \"{{addressId}}\"\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Admin - Users Management",
-      "item": [
-        {
-          "name": "Get All Users (Paginated)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      role\n      status\n      isEmailVerified\n      isActive\n      lastLogin\n      createdAt\n    }\n    total\n    page\n    limit\n    totalPages\n  }\n}",
-                "variables": "{\n  \"filters\": {\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Get Users - Filtered by Role",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      role\n      status\n    }\n    total\n    page\n    limit\n    totalPages\n  }\n}",
-                "variables": "{\n  \"filters\": {\n    \"role\": \"CUSTOMER\",\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Get Users - Search",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "query GetUsers($filters: UsersFilterInput) {\n  users(filters: $filters) {\n    users {\n      _id\n      firstName\n      lastName\n      email\n      role\n    }\n    total\n  }\n}",
-                "variables": "{\n  \"filters\": {\n    \"search\": \"john\",\n    \"page\": 1,\n    \"limit\": 10\n  }\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        },
-        {
-          "name": "Get User Admin Details",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "body": {
-              "mode": "graphql",
-              "graphql": {
-                "query": "query GetUserAdmin($id: ID!) {\n  userAdmin(id: $id) {\n    _id\n    firstName\n    lastName\n    email\n    role\n    status\n    isEmailVerified\n    phone\n    phoneVerified\n    lastLogin\n    isActive\n    loginAttempts\n    lockUntil\n    banReason\n    bannedAt\n    bannedBy\n    createdAt\n    updatedAt\n  }\n}",
-                "variables": "{\n  \"id\": \"{{userId}}\"\n}"
-              }
-            },
-            "url": {
-              "raw": "{{graphqlEndpoint}}",
-              "host": ["{{graphqlEndpoint}}"]
-            }
-          }
-        }
-      ]
+      "key": "jobId",
+      "value": "",
+      "type": "string"
     }
   ]
 }

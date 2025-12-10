@@ -22,6 +22,7 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { AppConfigModule } from './config/app.config.module';
 import { AppConfigService } from './config/app.config.service';
 import { UsersModule } from './users/users.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -67,13 +68,13 @@ import { UsersModule } from './users/users.module';
           autoSchemaFile: isDev ? join(process.cwd(), 'src/schema.gql') : true,
           sortSchema: true,
 
-          // ✅ Disable introspection in production
+          // Disable introspection in production
           introspection: isDev,
 
-          // ✅ Disable playground completely
+          // Disable playground completely
           playground: false,
 
-          // ✅ Production-safe CORS
+          // Production-safe CORS
           cors: {
             origin: isDev
               ? [
@@ -85,7 +86,7 @@ import { UsersModule } from './users/users.module';
             credentials: true,
           },
 
-          // ✅ Use appropriate landing page plugin based on environment
+          // Use appropriate landing page plugin based on environment
           plugins: [
             isDev
               ? ApolloServerPluginLandingPageLocalDefault({
@@ -137,7 +138,7 @@ import { UsersModule } from './users/users.module';
 
           context: ({ req, res }) => ({ req, res }),
 
-          // ✅ Production-safe error formatting (hide sensitive info)
+          // Production-safe error formatting (hide sensitive info)
           formatError: (formattedError: GraphQLFormattedError, error: any) => {
             // In production, hide internal error details
             if (!isDev) {
@@ -175,11 +176,12 @@ import { UsersModule } from './users/users.module';
             };
           },
 
-          // ✅ Disable detailed error messages in production
+          // Disable detailed error messages in production
           includeStacktraceInErrorResponses: isDev,
         };
       },
     }),
+    StorageModule,
     UsersModule,
     AuthModule,
   ],

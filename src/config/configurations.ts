@@ -70,6 +70,12 @@ const configuration = () => ({
   bullBoard: {
     password: process.env.BULL_BOARD_PASSWORD || 'change-this-password',
   },
+
+  storage: {
+    baseUrl: process.env.BASE_URL || 'http://localhost:5000',
+    uploadPath: process.env.UPLOAD_PATH || './uploads',
+    maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '10485760', 10), // 10MB default
+  },
 });
 
 export default configuration;

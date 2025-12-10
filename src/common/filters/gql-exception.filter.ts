@@ -3,9 +3,11 @@ import { ArgumentsHost, Catch, HttpException, Logger } from '@nestjs/common';
 import { GqlArgumentsHost, GqlExceptionFilter } from '@nestjs/graphql';
 import { GraphQLError } from 'graphql';
 import { MongoError } from 'mongodb';
+import { AppConfigService } from 'src/config/app.config.service';
 
 @Catch()
 export class GqlAllExceptionsFilter implements GqlExceptionFilter {
+  constructor(private readonly configService: AppConfigService) {}
   private readonly logger = new Logger(GqlAllExceptionsFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): GraphQLError {
@@ -89,7 +91,7 @@ export class GqlAllExceptionsFilter implements GqlExceptionFilter {
     }
 
     // Add field path for debugging in development
-    if (process.env.NODE_ENV === 'development' && info?.fieldName) {
+    if (this.configService.isDevelopment && info?.fieldName) {
       extensions.path = info.fieldName;
     }
 

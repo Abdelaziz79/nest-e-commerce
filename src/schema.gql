@@ -80,6 +80,50 @@ A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date
 """
 scalar DateTime
 
+type FileMetadata {
+  aspectRatio: String
+  format: String
+  height: Float
+  width: Float
+}
+
+enum FileStatus {
+  COMPLETED
+  FAILED
+  PENDING
+  PROCESSING
+}
+
+type FileType {
+  _id: ID!
+  createdAt: DateTime!
+  errorMessage: String
+  filename: String!
+  isPublic: Boolean!
+  metadata: FileMetadata
+  mimetype: String!
+  optimizedSize: Float
+  optimizedUrl: String
+  originalName: String!
+  size: Float!
+  status: FileStatus!
+  type: FileTypeEnum!
+  updatedAt: DateTime!
+  uploadedBy: String!
+  url: String!
+  variants: [String!]
+}
+
+"""Type of file being uploaded"""
+enum FileTypeEnum {
+  AVATAR
+  CATEGORY_IMAGE
+  DOCUMENT
+  OTHER
+  PRODUCT_IMAGE
+  PRODUCT_THUMBNAIL
+}
+
 input LoginInput {
   email: String!
   password: String!
@@ -90,6 +134,7 @@ type Mutation {
   banUser(input: BanUserInput!): UserAdminType!
   createUser(input: CreateUserInput!): UserProfileType!
   deleteAddress(addressId: ID!): UserProfileType!
+  deleteFile(id: ID!): Boolean!
   deleteUser: UserProfileType!
   login(input: LoginInput!): AuthPayload!
   logout(refreshToken: String!, userId: String!): Boolean!
@@ -105,6 +150,7 @@ type Mutation {
   updateUser(input: UpdateUserInput!): UserProfileType!
   updateUserRole(input: UpdateUserRoleInput!): UserAdminType!
   updateUserStatus(input: UpdateUserStatusInput!): UserAdminType!
+  uploadFile(file: Upload!, fileType: FileTypeEnum!, relatedEntity: String, relatedEntityId: String): UploadResponse!
   verifyEmail(input: VerifyEmailInput!): AuthPayload!
 }
 
@@ -116,6 +162,14 @@ enum OtpType {
   TWO_FACTOR
 }
 
+type PaginatedFilesType {
+  files: [FileType!]!
+  limit: Float!
+  page: Float!
+  total: Float!
+  totalPages: Float!
+}
+
 type PaginatedUsersType {
   limit: Float!
   page: Float!
@@ -125,7 +179,9 @@ type PaginatedUsersType {
 }
 
 type Query {
+  file(id: ID!): FileType!
   me: UserProfileType!
+  myFiles(limit: Float = 20, page: Float = 1): PaginatedFilesType!
   user(id: ID!): UserType!
   userAdmin(id: ID!): UserAdminType!
   users(filters: UsersFilterInput): PaginatedUsersType!
@@ -190,6 +246,15 @@ input UpdateUserRoleInput {
 input UpdateUserStatusInput {
   status: UserStatus!
   userId: String!
+}
+
+"""The `Upload` scalar type represents a file upload."""
+scalar Upload
+
+type UploadResponse {
+  file: FileType
+  message: String!
+  success: Boolean!
 }
 
 type UserAdminType {

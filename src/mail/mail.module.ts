@@ -31,7 +31,7 @@ import { EmailProcessor } from './processors/email.processor';
             type: 'exponential',
             delay: 2000,
           },
-          // ✅ FIX: Keep completed jobs for 1 hour
+          // FIX: Keep completed jobs for 1 hour
           removeOnComplete: {
             age: 3600, // 1 hour in seconds
             count: 100, // Keep last 100
