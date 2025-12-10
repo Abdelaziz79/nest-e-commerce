@@ -172,7 +172,16 @@ export class User extends Document {
   twoFactorEnabled: boolean;
 
   @Prop({ select: false })
-  twoFactorSecret: string;
+  twoFactorSecret: string; // Base32 encoded secret
+
+  @Prop({ select: false })
+  twoFactorBackupCodes: string[]; // Hashed backup codes
+
+  @Prop()
+  twoFactorEnabledAt: Date;
+
+  @Prop({ default: 0 })
+  twoFactorBackupCodesUsed: number;
 
   @Prop({
     type: [

@@ -218,6 +218,19 @@
                   "",
                   "if (jsonData.data && jsonData.data.login) {",
                   "    var response = jsonData.data.login;",
+                  "    ",
+                  "    // Check if 2FA is required",
+                  "    if (response.requiresTwoFactor) {",
+                  "        pm.environment.set('tempToken', response.tempToken);",
+                  "        console.log('⚠️  2FA required - tempToken stored');",
+                  "        console.log('⚠️  Use the \"Verify 2FA Login\" request with a 2FA code');",
+                  "        pm.test('Login requires 2FA', function() {",
+                  "            pm.expect(response.requiresTwoFactor).to.be.true;",
+                  "            pm.expect(response.tempToken).to.be.a('string').and.to.have.lengthOf.at.least(10);",
+                  "        });",
+                  "        return; // Exit early - don't process tokens",
+                  "    }",
+                  "    ",
                   "    var accessToken = response.accessToken;",
                   "    var refreshToken = response.refreshToken;",
                   "    var userId = response.user.id;",
@@ -271,7 +284,7 @@
               "raw": "{{graphqlEndpoint}}",
               "host": ["{{graphqlEndpoint}}"]
             },
-            "description": "Login with email and password. Email must be verified first. Returns access and refresh tokens."
+            "description": "Login with email and password. Email must be verified first. Returns access and refresh tokens. If 2FA is enabled, returns tempToken instead."
           },
           "response": []
         },
@@ -302,9 +315,7 @@
                   "    });",
                   "}"
                 ],
-                "type": "text/javascript",
-                "packages": {},
-                "requests": {}
+                "type": "text/javascript"
               }
             }
           ],
@@ -611,6 +622,461 @@
         }
       ],
       "description": "Complete password reset flow with OTP verification"
+    },
+    {
+      "name": "🔐 Two-Factor Authentication",
+      "item": [
+        {
+          "name": "Setup & Management",
+          "item": [
+            {
+              "name": "1. Initiate 2FA Setup",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "",
+                      "if (jsonData.data && jsonData.data.initiate2FASetup) {",
+                      "    var response = jsonData.data.initiate2FASetup;",
+                      "    ",
+                      "    pm.environment.set('twoFactorSecret', response.secret);",
+                      "    pm.environment.set('twoFactorQrCode', response.qrCode);",
+                      "    ",
+                      "    console.log('✓ 2FA setup initiated');",
+                      "    console.log('✓ Secret stored (use with authenticator app)');",
+                      "    console.log('✓ QR Code stored (data URL)');",
+                      "    ",
+                      "    pm.test('2FA setup initiated', function() {",
+                      "        pm.expect(response.secret).to.be.a('string').and.to.have.lengthOf.at.least(16);",
+                      "        pm.expect(response.qrCode).to.be.a('string').and.to.include('data:image/png;base64,');",
+                      "        pm.expect(response.manualEntryKey).to.be.a('string');",
+                      "        pm.expect(response.message).to.include('authenticator');",
+                      "    });",
+                      "} else if (jsonData.errors) {",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation Initiate2FASetup($input: Enable2FAInput!) {\n  initiate2FASetup(input: $input) {\n    secret\n    qrCode\n    manualEntryKey\n    message\n  }\n}",
+                    "variables": "{\n  \"input\": {\n    \"password\": \"{{testPassword}}\"\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Step 1: Initiate 2FA setup. Requires password confirmation. Returns secret and QR code for authenticator app.\n\n⚠️  IMPORTANT: Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.) or manually enter the secret key.\n\nAfter scanning, you will get 6-digit codes. Use one of those codes in the next step."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Verify 2FA Setup",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "",
+                      "if (jsonData.data && jsonData.data.verify2FASetup === true) {",
+                      "    console.log('✓ 2FA verified and enabled');",
+                      "    console.log('✓ Your account is now protected with 2FA');",
+                      "    ",
+                      "    pm.test('2FA enabled successfully', function() {",
+                      "        pm.expect(jsonData.data.verify2FASetup).to.be.true;",
+                      "    });",
+                      "} else if (jsonData.errors) {",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                      "    pm.test('Valid 2FA token required', function() {",
+                      "        pm.expect(jsonData.errors[0].message).to.include('Invalid');",
+                      "    });",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation Verify2FASetup($input: Verify2FASetupInput!) {\n  verify2FASetup(input: $input)\n}",
+                    "variables": "{\n  \"input\": {\n    \"token\": \"{{twoFactorToken}}\"\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Step 2: Verify 2FA setup. Enter the 6-digit code from your authenticator app to enable 2FA.\n\n⚠️  You must complete Step 1 first and scan the QR code with an authenticator app.\n\nTo get the code:\n1. Open Google Authenticator/Authy\n2. Find the entry for this app\n3. Enter the current 6-digit code below ({{twoFactorToken}})"
+              },
+              "response": []
+            },
+            {
+              "name": "3. Get 2FA Status",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "",
+                      "if (jsonData.data && jsonData.data.twoFactorStatus) {",
+                      "    var status = jsonData.data.twoFactorStatus;",
+                      "    console.log('✓ 2FA Status - Enabled:', status.enabled);",
+                      "    console.log('✓ Backup codes available:', status.hasBackupCodes);",
+                      "    console.log('✓ Backup codes remaining:', status.backupCodesRemaining);",
+                      "    ",
+                      "    pm.test('2FA status retrieved', function() {",
+                      "        pm.expect(status.enabled).to.be.a('boolean');",
+                      "        if (status.enabled) {",
+                      "            pm.expect(status.enabledAt).to.be.a('string');",
+                      "        }",
+                      "        pm.expect(status.hasBackupCodes).to.be.a('boolean');",
+                      "        pm.expect(status.backupCodesRemaining).to.be.a('number');",
+                      "    });",
+                      "} else if (jsonData.errors) {",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "query TwoFactorStatus {\n  twoFactorStatus {\n    enabled\n    enabledAt\n    hasBackupCodes\n    backupCodesRemaining\n  }\n}",
+                    "variables": ""
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Check 2FA status for the authenticated user. Shows whether 2FA is enabled, when it was enabled, and backup code status."
+              },
+              "response": []
+            },
+            {
+              "name": "4. Disable 2FA",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "",
+                      "if (jsonData.data && jsonData.data.disable2FA === true) {",
+                      "    console.log('✓ 2FA disabled');",
+                      "    console.log('✓ Two-factor authentication has been turned off');",
+                      "    ",
+                      "    pm.test('2FA disabled successfully', function() {",
+                      "        pm.expect(jsonData.data.disable2FA).to.be.true;",
+                      "    });",
+                      "    ",
+                      "    // Clear stored secrets",
+                      "    pm.environment.unset('twoFactorSecret');",
+                      "    pm.environment.unset('twoFactorQrCode');",
+                      "    pm.environment.unset('twoFactorToken');",
+                      "} else if (jsonData.errors) {",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                      "    pm.test('Requires valid password and 2FA token', function() {",
+                      "        pm.expect(jsonData.errors[0].message).to.include('Invalid');",
+                      "    });",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation Disable2FA($input: Disable2FAInput!) {\n  disable2FA(input: $input)\n}",
+                    "variables": "{\n  \"input\": {\n    \"password\": \"{{testPassword}}\",\n    \"token\": \"{{twoFactorToken}}\"\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Disable 2FA for your account. Requires password and current 2FA token for security.\n\n⚠️  You must provide a valid 2FA token from your authenticator app to disable 2FA."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Backup Codes",
+          "item": [
+            {
+              "name": "1. Generate Backup Codes",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "",
+                      "if (jsonData.data && jsonData.data.generate2FABackupCodes) {",
+                      "    var codes = jsonData.data.generate2FABackupCodes.codes;",
+                      "    ",
+                      "    pm.environment.set('backupCodes', JSON.stringify(codes));",
+                      "    pm.environment.set('backupCode', codes[0]); // Use first code for testing",
+                      "    ",
+                      "    console.log('✓ Backup codes generated:', codes.length, 'codes');",
+                      "    console.log('✓ First code stored for testing:', codes[0]);",
+                      "    console.log('⚠️  SAVE THESE CODES SECURELY! They can only be used once.');",
+                      "    ",
+                      "    pm.test('Backup codes generated', function() {",
+                      "        pm.expect(codes).to.be.an('array').with.lengthOf(10);",
+                      "        pm.expect(codes[0]).to.match(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/);",
+                      "        pm.expect(jsonData.data.generate2FABackupCodes.message).to.include('secure');",
+                      "    });",
+                      "} else if (jsonData.errors) {",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                      "    pm.test('Requires valid password', function() {",
+                      "        pm.expect(jsonData.errors[0].message).to.include('Invalid password');",
+                      "    });",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation Generate2FABackupCodes($input: Generate2FABackupCodesInput!) {\n  generate2FABackupCodes(input: $input) {\n    codes\n    message\n  }\n}",
+                    "variables": "{\n  \"input\": {\n    \"password\": \"{{testPassword}}\"\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Generate 10 backup codes for 2FA. Each code can be used once if you lose access to your authenticator app.\n\n⚠️  WARNING: This will replace any existing backup codes. Save them securely!"
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Login with 2FA",
+          "item": [
+            {
+              "name": "1. Verify 2FA Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "",
+                      "if (jsonData.data && jsonData.data.verify2FALogin) {",
+                      "    var response = jsonData.data.verify2FALogin;",
+                      "    var accessToken = response.accessToken;",
+                      "    var refreshToken = response.refreshToken;",
+                      "    var userId = response.user.id;",
+                      "    ",
+                      "    pm.environment.set('token', accessToken);",
+                      "    pm.environment.set('refreshToken', refreshToken);",
+                      "    pm.environment.set('userId', userId);",
+                      "    ",
+                      "    console.log('✓ 2FA login successful');",
+                      "    console.log('✓ Access token stored');",
+                      "    console.log('✓ Refresh token stored');",
+                      "    console.log('✓ User ID stored:', userId);",
+                      "    ",
+                      "    pm.test('2FA login successful', function() {",
+                      "        pm.expect(accessToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                      "        pm.expect(refreshToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                      "        pm.expect(userId).to.be.a('string');",
+                      "        pm.expect(response.user.email).to.eql(pm.environment.get('testEmail'));",
+                      "    });",
+                      "    ",
+                      "    // Clear temp token after successful login",
+                      "    pm.environment.unset('tempToken');",
+                      "} else if (jsonData.errors) {",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                      "    pm.test('Requires valid 2FA token and temp token', function() {",
+                      "        pm.expect(jsonData.errors[0].message).to.include('Invalid');",
+                      "    });",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation Verify2FALogin($input: Verify2FALoginInput!) {\n  verify2FALogin(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
+                    "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"token\": \"{{twoFactorToken}}\",\n    \"tempToken\": \"{{tempToken}}\"\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Complete login when 2FA is enabled. Requires the tempToken from the initial login and a 2FA code from your authenticator app.\n\n⚠️  You must first login normally (which returns tempToken if 2FA is enabled), then use that tempToken here along with a 2FA code."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Use Backup Code for Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "",
+                      "if (jsonData.data && jsonData.data.use2FABackupCode) {",
+                      "    var response = jsonData.data.use2FABackupCode;",
+                      "    var accessToken = response.accessToken;",
+                      "    var refreshToken = response.refreshToken;",
+                      "    var userId = response.user.id;",
+                      "    ",
+                      "    pm.environment.set('token', accessToken);",
+                      "    pm.environment.set('refreshToken', refreshToken);",
+                      "    pm.environment.set('userId', userId);",
+                      "    ",
+                      "    console.log('✓ Backup code login successful');",
+                      "    console.log('✓ Access token stored');",
+                      "    console.log('✓ Refresh token stored');",
+                      "    console.log('⚠️  Backup code used - it cannot be used again');",
+                      "    ",
+                      "    pm.test('Backup code login successful', function() {",
+                      "        pm.expect(accessToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                      "        pm.expect(refreshToken).to.be.a('string').and.to.have.lengthOf.at.least(50);",
+                      "        pm.expect(userId).to.be.a('string');",
+                      "        pm.expect(response.user.email).to.eql(pm.environment.get('testEmail'));",
+                      "    });",
+                      "    ",
+                      "    // Clear temp token after successful login",
+                      "    pm.environment.unset('tempToken');",
+                      "    ",
+                      "    // Remove used code from array",
+                      "    var codes = JSON.parse(pm.environment.get('backupCodes') || '[]');",
+                      "    if (codes.length > 0) {",
+                      "        codes.shift(); // Remove first code",
+                      "        pm.environment.set('backupCodes', JSON.stringify(codes));",
+                      "        console.log('✓ Remaining backup codes:', codes.length);",
+                      "    }",
+                      "} else if (jsonData.errors) {",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);",
+                      "    pm.test('Requires valid backup code and temp token', function() {",
+                      "        pm.expect(jsonData.errors[0].message).to.include('Invalid');",
+                      "    });",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation Use2FABackupCode($input: Use2FABackupCodeInput!) {\n  use2FABackupCode(input: $input) {\n    accessToken\n    refreshToken\n    user {\n      id\n      email\n      firstName\n      lastName\n      role\n    }\n  }\n}",
+                    "variables": "{\n  \"input\": {\n    \"email\": \"{{testEmail}}\",\n    \"backupCode\": \"{{backupCode}}\",\n    \"tempToken\": \"{{tempToken}}\"\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Login using a backup code when you don't have access to your authenticator app.\n\n⚠️  You must first login normally (which returns tempToken if 2FA is enabled), then use that tempToken here along with a backup code.\n\n⚠️  Each backup code can only be used ONCE. After using it, it will be removed from your account."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
     },
     {
       "name": "🔗 OAuth - Social Login",
@@ -3357,6 +3823,31 @@
     },
     {
       "key": "jobId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "twoFactorSecret",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "twoFactorToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tempToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "backupCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "backupCodes",
       "value": "",
       "type": "string"
     }

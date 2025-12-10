@@ -1,4 +1,3 @@
-// src/auth/auth.resolver.ts
 import { UseGuards } from '@nestjs/common';
 import { Args, Context, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Throttle } from '@nestjs/throttler';
@@ -6,20 +5,37 @@ import { User } from '../users/schemas/user.schema';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import {
+  Disable2FAInput,
+  Enable2FAInput,
+  Generate2FABackupCodesInput,
   LoginInput,
   RefreshTokenInput,
   RegisterInput,
   RequestPasswordResetInput,
   ResendOtpInput,
   ResetPasswordInput,
+  Use2FABackupCodeInput,
+  Verify2FALoginInput,
+  Verify2FASetupInput,
   VerifyEmailInput,
 } from './dto/auth.input';
-import { AuthPayload, RegistrationResponse, UserInfo } from './dto/auth.types';
+import {
+  AuthPayload,
+  BackupCodesResponse,
+  RegistrationResponse,
+  TwoFactorSetupResponse,
+  TwoFactorStatusResponse,
+  UserInfo,
+} from './dto/auth.types';
 import { GqlAuthGuard } from './guards/gql-auth.guard';
+import { TwoFactorService } from './services/two-factor.service';
 
 @Resolver()
 export class AuthResolver {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly twoFactorService: TwoFactorService,
+  ) {}
 
   // ==========================================
   // SIMPLE LOGIN (EMAIL + PASSWORD)
@@ -129,5 +145,87 @@ export class AuthResolver {
       lastName: user.lastName,
       role: user.role,
     };
+  }
+
+  // ==========================================
+  // TWO-FACTOR AUTHENTICATION
+  // ==========================================
+
+  @Query(() => TwoFactorStatusResponse)
+  @UseGuards(GqlAuthGuard)
+  async twoFactorStatus(@CurrentUser() user: User) {
+    return this.twoFactorService.getTwoFactorStatus(user._id.toString());
+  }
+
+  @Mutation(() => TwoFactorSetupResponse)
+  @UseGuards(GqlAuthGuard)
+  async initiate2FASetup(
+    @CurrentUser() user: User,
+    @Args('input') input: Enable2FAInput,
+  ) {
+    return this.twoFactorService.initiate2FASetup(
+      user._id.toString(),
+      user.email,
+      input.password,
+    );
+  }
+
+  @Mutation(() => Boolean)
+  @UseGuards(GqlAuthGuard)
+  async verify2FASetup(
+    @CurrentUser() user: User,
+    @Args('input') input: Verify2FASetupInput,
+  ) {
+    return this.twoFactorService.verifyAndEnableTwoFactor(
+      user._id.toString(),
+      input.token,
+    );
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Mutation(() => AuthPayload)
+  async verify2FALogin(@Args('input') input: Verify2FALoginInput) {
+    return this.twoFactorService.verify2FALogin(
+      input.email,
+      input.token,
+      input.tempToken,
+    );
+  }
+
+  @Mutation(() => Boolean)
+  @UseGuards(GqlAuthGuard)
+  async disable2FA(
+    @CurrentUser() user: User,
+    @Args('input') input: Disable2FAInput,
+  ) {
+    return this.twoFactorService.disable2FA(
+      user._id.toString(),
+      user.email,
+      input.password,
+      input.token,
+    );
+  }
+
+  @Mutation(() => BackupCodesResponse)
+  @UseGuards(GqlAuthGuard)
+  async generate2FABackupCodes(
+    @CurrentUser() user: User,
+    @Args('input') input: Generate2FABackupCodesInput,
+  ) {
+    return this.twoFactorService.generateBackupCodesWithVerification(
+      user._id.toString(),
+      user.email,
+      input.password,
+    );
+  }
+
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @Mutation(() => AuthPayload)
+  async use2FABackupCode(@Args('input') input: Use2FABackupCodeInput) {
+    return this.twoFactorService.use2FABackupCode(
+      input.email,
+      input.backupCode,
+      input.tempToken,
+    );
   }
 }

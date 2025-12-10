@@ -680,4 +680,69 @@ export class UsersService {
 
     await this.cacheManager.del(`user:${userId}`);
   }
+
+  // =================================================================
+  // 10. TWO-FACTOR AUTHENTICATION
+  // =================================================================
+
+  async findByIdWithTwoFactorSecret(userId: string): Promise<User> {
+    const user = await this.userModel
+      .findById(userId)
+      .select('+twoFactorSecret');
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  async findByIdWithBackupCodes(userId: string): Promise<User> {
+    const user = await this.userModel
+      .findById(userId)
+      .select('+twoFactorBackupCodes');
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  async updateTwoFactorSecret(userId: string, secret: string): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, {
+      twoFactorSecret: secret,
+    });
+    await this.cacheManager.del(`user:${userId}`);
+  }
+
+  async enableTwoFactor(userId: string): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, {
+      twoFactorEnabled: true,
+      twoFactorEnabledAt: new Date(),
+    });
+    await this.cacheManager.del(`user:${userId}`);
+  }
+
+  async disableTwoFactor(userId: string): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, {
+      twoFactorEnabled: false,
+      twoFactorSecret: null,
+      twoFactorBackupCodes: [],
+      twoFactorEnabledAt: null,
+      twoFactorBackupCodesUsed: 0,
+    });
+    await this.cacheManager.del(`user:${userId}`);
+  }
+
+  async updateBackupCodes(
+    userId: string,
+    hashedCodes: string[],
+  ): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, {
+      twoFactorBackupCodes: hashedCodes,
+      twoFactorBackupCodesUsed: 0,
+    });
+    await this.cacheManager.del(`user:${userId}`);
+  }
+
+  async removeBackupCode(userId: string, index: number): Promise<void> {
+    const user = await this.findByIdWithBackupCodes(userId);
+    user.twoFactorBackupCodes.splice(index, 1);
+    user.twoFactorBackupCodesUsed += 1;
+    await user.save();
+    await this.cacheManager.del(`user:${userId}`);
+  }
 }

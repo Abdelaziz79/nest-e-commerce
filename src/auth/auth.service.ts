@@ -15,6 +15,7 @@ import { User, UserStatus } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { OtpService } from './otp.service';
 import { OtpType } from './schemas/otp.schema';
+import { TwoFactorService } from './services/two-factor.service';
 
 @Injectable()
 export class AuthService {
@@ -24,6 +25,7 @@ export class AuthService {
     private readonly appConfigService: AppConfigService,
     private readonly mailQueueService: MailQueueService,
     private readonly otpService: OtpService,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
 
   // ===============================================
@@ -105,6 +107,24 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Check if 2FA is enabled
+    if (user.twoFactorEnabled) {
+      // Generate temporary token for 2FA flow
+      const tempToken = await this.twoFactorService.generateTempToken(
+        user._id.toString(),
+      );
+
+      return {
+        requiresTwoFactor: true,
+        tempToken,
+        message: 'Please provide your 2FA code to complete login',
+        accessToken: null,
+        refreshToken: null,
+        user: null,
+      };
+    }
+
+    // No 2FA required - complete login
     await this.usersService.updateLastLogin(user._id.toString());
 
     const tokens = await this.generateTokens(user);
@@ -113,9 +133,13 @@ export class AuthService {
       tokens.refreshToken,
     );
 
-    return tokens;
+    return {
+      ...tokens,
+      requiresTwoFactor: false,
+      tempToken: null,
+      message: null,
+    };
   }
-
   // ===============================================
   // REGISTER WITH EMAIL VERIFICATION
   // ===============================================
@@ -392,5 +416,24 @@ export class AuthService {
     await this.mailQueueService.sendWelcomeEmail(user.email, user.firstName);
 
     return user;
+  }
+
+  // ===============================================
+  // HELPER FUNCTIONS
+  // ===============================================
+
+  /**
+   * Complete 2FA login and generate tokens
+   * This is called after 2FA verification is complete
+   */
+  async complete2FALogin(userId: string) {
+    const user = await this.usersService.findById(userId);
+
+    await this.usersService.updateLastLogin(userId);
+
+    const tokens = await this.generateTokens(user as any);
+    await this.usersService.addRefreshToken(userId, tokens.refreshToken);
+
+    return tokens;
   }
 }

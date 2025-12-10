@@ -1,6 +1,13 @@
 // src/auth/dto/auth.input.ts
 import { Field, InputType, registerEnumType } from '@nestjs/graphql';
-import { IsEmail, IsEnum, IsString, Matches, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { OtpType } from '../schemas/otp.schema';
 
 // Register OtpType enum for GraphQL
@@ -96,4 +103,72 @@ export class ResendOtpInput {
   @Field(() => OtpType)
   @IsEnum(OtpType)
   type: OtpType;
+}
+
+@InputType()
+export class Enable2FAInput {
+  @Field()
+  @IsString()
+  password: string; // User must confirm with password
+}
+
+@InputType()
+export class Verify2FASetupInput {
+  @Field()
+  @IsString()
+  @MinLength(6)
+  @MaxLength(6)
+  token: string; // 6-digit code from authenticator app
+}
+
+@InputType()
+export class Disable2FAInput {
+  @Field()
+  @IsString()
+  password: string;
+
+  @Field()
+  @IsString()
+  @MinLength(6)
+  @MaxLength(6)
+  token: string; // 6-digit code to confirm
+}
+
+@InputType()
+export class Verify2FALoginInput {
+  @Field()
+  @IsEmail()
+  email: string;
+
+  @Field()
+  @IsString()
+  @MinLength(6)
+  @MaxLength(6)
+  token: string;
+
+  @Field()
+  @IsString()
+  tempToken: string; // Temporary token from initial login
+}
+
+@InputType()
+export class Generate2FABackupCodesInput {
+  @Field()
+  @IsString()
+  password: string;
+}
+
+@InputType()
+export class Use2FABackupCodeInput {
+  @Field()
+  @IsEmail()
+  email: string;
+
+  @Field()
+  @IsString()
+  backupCode: string;
+
+  @Field()
+  @IsString()
+  tempToken: string;
 }

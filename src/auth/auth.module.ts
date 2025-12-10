@@ -12,6 +12,7 @@ import { AuthResolver } from './auth.resolver';
 import { AuthService } from './auth.service';
 import { OtpService } from './otp.service';
 import { Otp, OtpSchema } from './schemas/otp.schema';
+import { TwoFactorService } from './services/two-factor.service';
 import { GithubStrategy } from './strategies/github.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -44,6 +45,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     GoogleStrategy,
     GithubStrategy,
     OtpService,
+    TwoFactorService,
   ],
   exports: [AuthService],
 })
