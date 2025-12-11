@@ -1,4 +1,4 @@
-// src/mail/mail.module.ts - FIXED VERSION
+// src/mail/mail.module.ts
 
 import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { ExpressAdapter } from '@bull-board/express';

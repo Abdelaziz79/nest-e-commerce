@@ -1,4 +1,4 @@
-// src/auth/auth.service.ts - UPDATED VERSION
+// src/auth/auth.service.ts
 
 import {
   BadRequestException,
@@ -16,6 +16,7 @@ import { UsersService } from '../users/users.service';
 import { OtpService } from './otp.service';
 import { OtpType } from './schemas/otp.schema';
 import { TwoFactorService } from './services/two-factor.service';
+import { NotificationHelperService } from 'src/notifications/notification-helper.service';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +27,7 @@ export class AuthService {
     private readonly mailQueueService: MailQueueService,
     private readonly otpService: OtpService,
     private readonly twoFactorService: TwoFactorService,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   // ===============================================
@@ -174,7 +176,6 @@ export class AuthService {
   }
 
   async verifyEmail(email: string, otpCode: string) {
-    // Check if user exists and if already verified
     const user = await this.usersService.findByEmail(email);
 
     if (user.isEmailVerified) {
@@ -183,14 +184,23 @@ export class AuthService {
 
     await this.otpService.verifyOtp(email, otpCode, OtpType.EMAIL_VERIFICATION);
 
-    // Update user: set verified AND change status to ACTIVE
     await this.usersService.update(user._id.toString(), {
       isEmailVerified: true,
       status: UserStatus.ACTIVE,
     });
 
-    // Fetch updated user for token generation
     const updatedUser = await this.usersService.findByEmail(email);
+
+    // SEND NOTIFICATIONS
+    await Promise.all([
+      // Welcome notification
+      this.notificationHelper.notifyWelcome(updatedUser._id.toString(), {
+        firstName: updatedUser.firstName,
+        appName: this.appConfigService.appName,
+      }),
+      // Email verified notification
+      this.notificationHelper.notifyEmailVerified(updatedUser._id.toString()),
+    ]);
 
     const tokens = await this.generateTokens(updatedUser);
     await this.usersService.addRefreshToken(
@@ -252,10 +262,14 @@ export class AuthService {
 
       await this.usersService.revokeAllRefreshTokens(user._id.toString());
 
-      await this.mailQueueService.sendPasswordChangedEmail(
-        user.email,
-        user.firstName,
-      );
+      await Promise.all([
+        this.mailQueueService.sendPasswordChangedEmail(
+          user.email,
+          user.firstName,
+        ),
+        // SEND NOTIFICATION
+        this.notificationHelper.notifyPasswordChanged(user._id.toString()),
+      ]);
 
       return true;
     } catch (error) {

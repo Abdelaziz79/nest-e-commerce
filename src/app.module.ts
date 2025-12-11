@@ -23,6 +23,7 @@ import { AppConfigModule } from './config/app.config.module';
 import { AppConfigService } from './config/app.config.service';
 import { UsersModule } from './users/users.module';
 import { StorageModule } from './storage/storage.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -73,6 +74,18 @@ import { StorageModule } from './storage/storage.module';
 
           // Disable playground completely
           playground: false,
+
+          subscriptions: {
+            'graphql-ws': {
+              path: '/graphql',
+              onConnect: (context: any) => {
+                const { connectionParams, extra } = context;
+                // Validate token from connectionParams if needed
+                return { req: extra.request };
+              },
+            },
+            'subscriptions-transport-ws': false, // Disable old protocol
+          },
 
           // Production-safe CORS
           cors: {
@@ -184,6 +197,7 @@ import { StorageModule } from './storage/storage.module';
     StorageModule,
     UsersModule,
     AuthModule,
+    NotificationsModule,
   ],
   providers: [
     {

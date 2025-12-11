@@ -1666,6 +1666,689 @@
       "description": "Manage user addresses with full CRUD operations"
     },
     {
+      "name": "🔔 Notifications",
+      "item": [
+        {
+          "name": "User - Queries",
+          "item": [
+            {
+              "name": "1. Get My Notifications (Paginated)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.myNotifications) {\n",
+                      "    var result = jsonData.data.myNotifications;\n",
+                      "    console.log('✓ Retrieved', result.notifications.length, 'notifications');\n",
+                      "    console.log('✓ Unread count:', result.unreadCount);\n",
+                      "    console.log('✓ Total notifications:', result.total);\n",
+                      "    ",
+                      "    if (result.notifications.length > 0) {\n",
+                      "        pm.environment.set('notificationId', result.notifications[0]._id);\n",
+                      "        console.log('✓ Stored first notification ID:', result.notifications[0]._id);\n",
+                      "    }\n",
+                      "    ",
+                      "    pm.test('Notifications retrieved successfully', function() {\n",
+                      "        pm.expect(result.notifications).to.be.an('array');\n",
+                      "        pm.expect(result.total).to.be.a('number');\n",
+                      "        pm.expect(result.unreadCount).to.be.a('number');\n",
+                      "        pm.expect(result.page).to.eql(1);\n",
+                      "        pm.expect(result.limit).to.eql(20);\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "query GetMyNotifications($filters: NotificationFiltersInput) {\n  myNotifications(filters: $filters) {\n    notifications {\n      _id\n      title\n      message\n      type\n      priority\n      channels\n      isRead\n      readAt\n      data\n      actionUrl\n      actionText\n      imageUrl\n      icon\n      emailSent\n      pushSent\n      createdAt\n    }\n    total\n    unreadCount\n    page\n    limit\n    totalPages\n  }\n}",
+                    "variables": "{\n  \"filters\": {\n    \"page\": 1,\n    \"limit\": 20\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Get paginated list of user's notifications. Returns unread count and total. Accepts filters for type, read status, and pagination."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Get Notification by ID",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.notification) {\n",
+                      "    var notification = jsonData.data.notification;\n",
+                      "    console.log('✓ Notification retrieved:', notification._id);\n",
+                      "    ",
+                      "    pm.test('Notification details retrieved', function() {\n",
+                      "        pm.expect(notification._id).to.eql(pm.environment.get('notificationId'));\n",
+                      "        pm.expect(notification.title).to.be.a('string');\n",
+                      "        pm.expect(notification.type).to.be.a('string');\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "query GetNotification($id: ID!) {\n  notification(id: $id) {\n    _id\n    title\n    message\n    type\n    priority\n    channels\n    isRead\n    readAt\n    data\n    actionUrl\n    actionText\n    imageUrl\n    icon\n    emailSent\n    emailSentAt\n    pushSent\n    pushSentAt\n    createdAt\n  }\n}",
+                    "variables": "{\n  \"id\": \"{{notificationId}}\"\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Get single notification by ID. Must belong to the authenticated user."
+              },
+              "response": []
+            },
+            {
+              "name": "3. Get Notification Stats",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.notificationStats) {\n",
+                      "    var stats = jsonData.data.notificationStats;\n",
+                      "    console.log('✓ Total notifications:', stats.total);\n",
+                      "    console.log('✓ Unread:', stats.unread);\n",
+                      "    console.log('✓ Read:', stats.read);\n",
+                      "    console.log('✓ Archived:', stats.archived);\n",
+                      "    console.log('✓ By type:', stats.byType.length, 'types');\n",
+                      "    ",
+                      "    pm.test('Notification stats retrieved', function() {\n",
+                      "        pm.expect(stats.total).to.be.a('number');\n",
+                      "        pm.expect(stats.unread).to.be.a('number');\n",
+                      "        pm.expect(stats.read).to.be.a('number');\n",
+                      "        pm.expect(stats.archived).to.be.a('number');\n",
+                      "        pm.expect(stats.byType).to.be.an('array');\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "query GetNotificationStats {\n  notificationStats {\n    total\n    unread\n    read\n    archived\n    byType {\n      type\n      count\n      unreadCount\n    }\n  }\n}",
+                    "variables": ""
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Get notification statistics including total, read/unread counts, and breakdown by type."
+              },
+              "response": []
+            },
+            {
+              "name": "4. Get Notification Preferences",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.notificationPreferences) {\n",
+                      "    var prefs = jsonData.data.notificationPreferences;\n",
+                      "    console.log('✓ Notification preferences retrieved');\n",
+                      "    console.log('✓ Enabled:', prefs.enabled);\n",
+                      "    console.log('✓ Email enabled:', prefs.emailEnabled);\n",
+                      "    console.log('✓ Push enabled:', prefs.pushEnabled);\n",
+                      "    console.log('✓ Type preferences:', prefs.typePreferences.length, 'types');\n",
+                      "    ",
+                      "    pm.test('Notification preferences retrieved', function() {\n",
+                      "        pm.expect(prefs.userId).to.be.a('string');\n",
+                      "        pm.expect(prefs.enabled).to.be.a('boolean');\n",
+                      "        pm.expect(prefs.typePreferences).to.be.an('array');\n",
+                      "        pm.expect(prefs.doNotDisturb).to.be.a('boolean');\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "query GetNotificationPreferences {\n  notificationPreferences {\n    _id\n    userId\n    enabled\n    emailEnabled\n    pushEnabled\n    smsEnabled\n    quietHours {\n      enabled\n      startHour\n      endHour\n      timezone\n    }\n    enableDigest\n    digestFrequency\n    digestTime\n    typePreferences {\n      type\n      channels\n      enabled\n    }\n    doNotDisturb\n    doNotDisturbUntil\n    createdAt\n    updatedAt\n  }\n}",
+                    "variables": ""
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Get user's notification preferences including channel settings, quiet hours, and type-specific preferences."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "User - Mutations",
+          "item": [
+            {
+              "name": "1. Mark Notifications as Read",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.markNotificationsAsRead === true) {\n",
+                      "    console.log('✓ Notifications marked as read');\n",
+                      "    pm.test('Mark as read successful', function() {\n",
+                      "        pm.expect(jsonData.data.markNotificationsAsRead).to.be.true;\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation MarkNotificationsAsRead($input: MarkNotificationsInput!) {\n  markNotificationsAsRead(input: $input)\n}",
+                    "variables": "{\n  \"input\": {\n    \"notificationIds\": [\"{{notificationId}}\"],\n    \"isRead\": true\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Mark specific notifications as read. Updates readAt timestamp."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Mark All Notifications as Read",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.markAllNotificationsAsRead === true) {\n",
+                      "    console.log('✓ All notifications marked as read');\n",
+                      "    pm.test('Mark all as read successful', function() {\n",
+                      "        pm.expect(jsonData.data.markAllNotificationsAsRead).to.be.true;\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation MarkAllNotificationsAsRead {\n  markAllNotificationsAsRead\n}",
+                    "variables": ""
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Mark all unread notifications as read in one operation."
+              },
+              "response": []
+            },
+            {
+              "name": "3. Archive Notifications",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.archiveNotifications === true) {\n",
+                      "    console.log('✓ Notifications archived');\n",
+                      "    pm.test('Archive successful', function() {\n",
+                      "        pm.expect(jsonData.data.archiveNotifications).to.be.true;\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation ArchiveNotifications($notificationIds: [ID!]!) {\n  archiveNotifications(notificationIds: $notificationIds)\n}",
+                    "variables": "{\n  \"notificationIds\": [\"{{notificationId}}\"]\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Archive notifications to clean up inbox. Archived notifications don't appear in main list."
+              },
+              "response": []
+            },
+            {
+              "name": "4. Delete Notifications",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.deleteNotifications === true) {\n",
+                      "    console.log('✓ Notifications deleted');\n",
+                      "    pm.test('Delete successful', function() {\n",
+                      "        pm.expect(jsonData.data.deleteNotifications).to.be.true;\n",
+                      "    });\n",
+                      "    ",
+                      "    pm.environment.unset('notificationId');\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation DeleteNotifications($notificationIds: [ID!]!) {\n  deleteNotifications(notificationIds: $notificationIds)\n}",
+                    "variables": "{\n  \"notificationIds\": [\"{{notificationId}}\"]\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Permanently delete notifications. Cannot be undone."
+              },
+              "response": []
+            },
+            {
+              "name": "5. Update Notification Preferences",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.updateNotificationPreferences) {\n",
+                      "    var prefs = jsonData.data.updateNotificationPreferences;\n",
+                      "    console.log('✓ Notification preferences updated');\n",
+                      "    ",
+                      "    pm.test('Preferences updated successfully', function() {\n",
+                      "        pm.expect(prefs.emailEnabled).to.be.false;\n",
+                      "        pm.expect(prefs.pushEnabled).to.be.true;\n",
+                      "        pm.expect(prefs.doNotDisturb).to.be.false;\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation UpdateNotificationPreferences($input: UpdateNotificationPreferencesInput!) {\n  updateNotificationPreferences(input: $input) {\n    _id\n    enabled\n    emailEnabled\n    pushEnabled\n    smsEnabled\n    doNotDisturb\n    typePreferences {\n      type\n      channels\n      enabled\n    }\n  }\n}",
+                    "variables": "{\n  \"input\": {\n    \"emailEnabled\": false,\n    \"pushEnabled\": true,\n    \"doNotDisturb\": false\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Update notification preferences. All fields are optional. Only provided fields will be updated."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Admin - Management",
+          "item": [
+            {
+              "name": "1. Create Notification for User",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.createNotificationForUser) {\n",
+                      "    var notification = jsonData.data.createNotificationForUser;\n",
+                      "    console.log('✓ Admin notification created:', notification._id);\n",
+                      "    pm.environment.set('adminNotificationId', notification._id);\n",
+                      "    ",
+                      "    pm.test('Admin notification created successfully', function() {\n",
+                      "        pm.expect(notification.title).to.eql('System Maintenance');\n",
+                      "        pm.expect(notification.type).to.eql('SYSTEM');\n",
+                      "        pm.expect(notification.priority).to.eql('HIGH');\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation CreateNotificationForUser($userId: ID!, $input: CreateNotificationInput!) {\n  createNotificationForUser(userId: $userId, input: $input) {\n    _id\n    title\n    message\n    type\n    priority\n    channels\n    isRead\n    createdAt\n  }\n}",
+                    "variables": "{\n  \"userId\": \"{{userId}}\",\n  \"input\": {\n    \"title\": \"System Maintenance\",\n    \"message\": \"Scheduled maintenance tonight at 2 AM UTC\",\n    \"type\": \"SYSTEM\",\n    \"priority\": \"HIGH\",\n    \"channels\": [\"IN_APP\", \"EMAIL\"],\n    \"actionUrl\": \"/maintenance\",\n    \"actionText\": \"Learn More\"\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Admin: Create notification for specific user. Requires admin/super_admin role."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Send Bulk Notification",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();\n",
+                      "if (jsonData.data && jsonData.data.sendBulkNotification) {\n",
+                      "    var result = jsonData.data.sendBulkNotification;\n",
+                      "    console.log('✓ Bulk notification sent');\n",
+                      "    console.log('✓ Success count:', result.successCount);\n",
+                      "    console.log('✓ Failure count:', result.failureCount);\n",
+                      "    ",
+                      "    pm.test('Bulk notification sent successfully', function() {\n",
+                      "        pm.expect(result.success).to.be.true;\n",
+                      "        pm.expect(result.successCount).to.be.a('number');\n",
+                      "        pm.expect(result.failureCount).to.be.a('number');\n",
+                      "    });\n",
+                      "} else if (jsonData.errors) {\n",
+                      "    console.error('❌ GraphQL errors:', jsonData.errors);\n",
+                      "}"
+                    ],
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token}}"
+                  }
+                ],
+                "body": {
+                  "mode": "graphql",
+                  "graphql": {
+                    "query": "mutation SendBulkNotification($input: BulkNotificationInput!) {\n  sendBulkNotification(input: $input) {\n    success\n    message\n    successCount\n    failureCount\n    errors\n  }\n}",
+                    "variables": "{\n  \"input\": {\n    \"userIds\": [\"{{userId}}\"],\n    \"title\": \"Promotional Offer\",\n    \"message\": \"Get 20% off on all products this weekend!\",\n    \"type\": \"PROMOTIONAL\",\n    \"priority\": \"NORMAL\",\n    \"channels\": [\"EMAIL\", \"PUSH\"],\n    \"actionUrl\": \"/sale\",\n    \"actionText\": \"Shop Now\"\n  }\n}"
+                  }
+                },
+                "url": {
+                  "raw": "{{graphqlEndpoint}}",
+                  "host": ["{{graphqlEndpoint}}"]
+                },
+                "description": "Admin: Send bulk notification to multiple users. Supports up to thousands of users."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Real-time (WebSocket)",
+          "item": [
+            {
+              "name": "1. Subscribe to New Notifications",
+              "request": {
+                "type": "websocket",
+                "url": {
+                  "raw": "ws://localhost:5000/notifications",
+                  "protocol": "ws",
+                  "host": ["localhost"],
+                  "port": "5000",
+                  "path": ["notifications"]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": {
+                    "token": "{{token}}"
+                  }
+                },
+                "message": [
+                  {
+                    "type": "string",
+                    "data": "{\"id\":\"1\",\"type\":\"start\",\"payload\":{\"query\":\"subscription { newNotification { _id title message type priority createdAt } }\"}}"
+                  }
+                ],
+                "description": "WebSocket subscription for real-time notifications. Connect to notifications namespace and authenticate with Bearer token. Listens for new notifications."
+              },
+              "response": []
+            },
+            {
+              "name": "2. Subscribe to Notification Updates",
+              "request": {
+                "type": "websocket",
+                "url": {
+                  "raw": "ws://localhost:5000/notifications",
+                  "protocol": "ws",
+                  "host": ["localhost"],
+                  "port": "5000",
+                  "path": ["notifications"]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": {
+                    "token": "{{token}}"
+                  }
+                },
+                "message": [
+                  {
+                    "type": "string",
+                    "data": "{\"id\":\"2\",\"type\":\"start\",\"payload\":{\"query\":\"subscription { notificationUpdated }\"}}"
+                  }
+                ],
+                "description": "WebSocket subscription for notification update events (mark as read, archive, etc.)."
+              },
+              "response": []
+            }
+          ]
+        }
+      ],
+      "description": "Complete notification system with GraphQL queries, mutations, and WebSocket subscriptions for real-time updates"
+    },
+    {
       "name": "📁 Storage - GraphQL",
       "item": [
         {
@@ -3848,6 +4531,16 @@
     },
     {
       "key": "backupCodes",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notificationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminNotificationId",
       "value": "",
       "type": "string"
     }

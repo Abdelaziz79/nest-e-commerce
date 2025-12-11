@@ -16,12 +16,14 @@ import { TwoFactorService } from './services/two-factor.service';
 import { GithubStrategy } from './strategies/github.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
     UsersModule,
     AppConfigModule,
     MailModule,
+    NotificationsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     MongooseModule.forFeature([{ name: Otp.name, schema: OtpSchema }]),
     JwtModule.registerAsync({

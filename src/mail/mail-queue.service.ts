@@ -1,4 +1,4 @@
-// src/mail/mail-queue.service.ts - FIXED VERSION
+// src/mail/mail-queue.service.ts
 
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable, Logger } from '@nestjs/common';
@@ -39,7 +39,7 @@ export class MailQueueService {
   ) {}
 
   /**
-   * FIXED: Keep completed jobs for 1 hour so they appear in Bull Board
+   * Keep completed jobs for 1 hour so they appear in Bull Board
    */
   private async addToQueue(
     jobData: EmailJobData,

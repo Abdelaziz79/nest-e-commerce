@@ -11,17 +11,17 @@ import { AppConfigService } from './config/app.config.service';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger:
-      process.env.NODE_ENV === 'production'
-        ? ['error', 'warn']
-        : ['log', 'error', 'warn', 'debug', 'verbose'],
+    logger: ['log', 'error', 'warn', 'debug', 'verbose'],
   });
+
   const configService = app.get(AppConfigService);
   const logger = new Logger('Bootstrap');
   const isDev = configService.isDevelopment;
 
-  // CRITICAL: Add graphql-upload middleware BEFORE other middleware
-  // This must be added before helmet and CORS
+  if (!isDev) {
+    app.useLogger(['error', 'warn']);
+  }
+
   app.use(
     graphqlUploadExpress({
       maxFileSize: 10 * 1024 * 1024, // 10MB max file size

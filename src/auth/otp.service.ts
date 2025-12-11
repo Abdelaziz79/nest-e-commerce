@@ -1,4 +1,4 @@
-// src/auth/otp.service.ts - FIXED VERSION
+// src/auth/otp.service.ts
 
 import {
   BadRequestException,

@@ -56,6 +56,25 @@ input BanUserInput {
   userId: String!
 }
 
+input BulkNotificationInput {
+  actionText: String
+  actionUrl: String
+  channels: [NotificationChannel!]
+  message: String!
+  priority: NotificationPriority
+  title: String!
+  type: NotificationType!
+  userIds: [ID!]!
+}
+
+type BulkNotificationResponse {
+  errors: [String!]!
+  failureCount: Float!
+  message: String!
+  success: Boolean!
+  successCount: Float!
+}
+
 input CoordinatesInput {
   lat: Float!
   lng: Float!
@@ -64,6 +83,19 @@ input CoordinatesInput {
 type CoordinatesType {
   lat: Float!
   lng: Float!
+}
+
+input CreateNotificationInput {
+  actionText: String
+  actionUrl: String
+  channels: [NotificationChannel!]
+  data: JSONObject
+  icon: String
+  imageUrl: String
+  message: String!
+  priority: NotificationPriority
+  title: String!
+  type: NotificationType!
 }
 
 input CreateUserInput {
@@ -145,32 +177,51 @@ input Generate2FABackupCodesInput {
   password: String!
 }
 
+"""
+The `JSONObject` scalar type represents JSON objects as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
+"""
+scalar JSONObject
+
 input LoginInput {
   email: String!
   password: String!
 }
 
+input MarkNotificationsInput {
+  isRead: Boolean!
+  notificationIds: [ID!]!
+}
+
 type Mutation {
   addAddress(input: AddAddressInput!): UserProfileType!
+  archiveNotifications(notificationIds: [ID!]!): Boolean!
   banUser(input: BanUserInput!): UserAdminType!
+  createNotificationForUser(input: CreateNotificationInput!, userId: ID!): NotificationType_GQL!
   createUser(input: CreateUserInput!): UserProfileType!
   deleteAddress(addressId: ID!): UserProfileType!
+  deleteAllReadNotifications: Boolean!
   deleteFile(id: ID!): Boolean!
+  deleteNotifications(notificationIds: [ID!]!): Boolean!
   deleteUser: UserProfileType!
   disable2FA(input: Disable2FAInput!): Boolean!
   generate2FABackupCodes(input: Generate2FABackupCodesInput!): BackupCodesResponse!
   initiate2FASetup(input: Enable2FAInput!): TwoFactorSetupResponse!
   login(input: LoginInput!): AuthPayload!
   logout(refreshToken: String!, userId: String!): Boolean!
+  markAllNotificationsAsRead: Boolean!
+  markNotificationsAsRead(input: MarkNotificationsInput!): Boolean!
+  markNotificationsAsUnread(input: MarkNotificationsInput!): Boolean!
   promoteToSuperAdmin(userId: ID!): UserAdminType!
   refreshToken(input: RefreshTokenInput!): AuthPayload!
   register(input: RegisterInput!): RegistrationResponse!
   requestPasswordReset(input: RequestPasswordResetInput!): Boolean!
   resendOtp(input: ResendOtpInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
+  sendBulkNotification(input: BulkNotificationInput!): BulkNotificationResponse!
   setDefaultAddress(addressId: ID!): UserProfileType!
   unbanUser(userId: ID!): UserAdminType!
   updateAddress(addressId: ID!, input: UpdateAddressInput!): UserProfileType!
+  updateNotificationPreferences(input: UpdateNotificationPreferencesInput!): NotificationPreferencesType!
   updateUser(input: UpdateUserInput!): UserProfileType!
   updateUserRole(input: UpdateUserRoleInput!): UserAdminType!
   updateUserStatus(input: UpdateUserStatusInput!): UserAdminType!
@@ -179,6 +230,109 @@ type Mutation {
   verify2FALogin(input: Verify2FALoginInput!): AuthPayload!
   verify2FASetup(input: Verify2FASetupInput!): Boolean!
   verifyEmail(input: VerifyEmailInput!): AuthPayload!
+}
+
+enum NotificationChannel {
+  EMAIL
+  IN_APP
+  PUSH
+  SMS
+}
+
+input NotificationFiltersInput {
+  archived: Boolean
+  isRead: Boolean
+  limit: Float
+  page: Float
+  type: NotificationType
+}
+
+type NotificationPreferencesType {
+  _id: ID!
+  createdAt: DateTime!
+  digestFrequency: String
+  digestTime: String
+  doNotDisturb: Boolean!
+  doNotDisturbUntil: DateTime
+  emailEnabled: Boolean!
+  enableDigest: Boolean!
+  enabled: Boolean!
+  pushEnabled: Boolean!
+  quietHours: QuietHoursType
+  smsEnabled: Boolean!
+  typePreferences: [TypePreferenceType!]!
+  updatedAt: DateTime!
+  userId: ID!
+}
+
+enum NotificationPriority {
+  HIGH
+  LOW
+  NORMAL
+  URGENT
+}
+
+type NotificationStatsType {
+  archived: Float!
+  byType: [NotificationTypeCount!]!
+  read: Float!
+  total: Float!
+  unread: Float!
+}
+
+enum NotificationType {
+  ACCOUNT_SECURITY
+  ADMIN_MESSAGE
+  EMAIL_VERIFIED
+  ORDER_CANCELLED
+  ORDER_CONFIRMED
+  ORDER_DELIVERED
+  ORDER_PLACED
+  ORDER_SHIPPED
+  PASSWORD_CHANGED
+  PAYMENT_FAILED
+  PAYMENT_SUCCESS
+  PRICE_DROP
+  PRODUCT_BACK_IN_STOCK
+  PROMOTIONAL
+  REVIEW_REPLY
+  SYSTEM
+  TWO_FACTOR_ENABLED
+  WELCOME
+  WISHLIST_ITEM_SALE
+}
+
+type NotificationTypeCount {
+  count: Float!
+  type: NotificationType!
+  unreadCount: Float!
+}
+
+type NotificationType_GQL {
+  _id: ID!
+  actionText: String
+  actionUrl: String
+  archived: Boolean!
+  channels: [NotificationChannel!]!
+  createdAt: DateTime!
+  data: JSONObject
+  emailSent: Boolean!
+  emailSentAt: DateTime
+  expiresAt: DateTime
+  icon: String
+  imageUrl: String
+  isRead: Boolean!
+  message: String!
+  priority: NotificationPriority!
+  pushSent: Boolean!
+  pushSentAt: DateTime
+  readAt: DateTime
+  relatedEntity: String
+  relatedEntityId: String
+  title: String!
+  type: NotificationType!
+  updatedAt: DateTime!
+  userId: ID!
 }
 
 """Types of OTP verification"""
@@ -197,6 +351,15 @@ type PaginatedFilesType {
   totalPages: Float!
 }
 
+type PaginatedNotificationsType {
+  limit: Float!
+  notifications: [NotificationType_GQL!]!
+  page: Float!
+  total: Float!
+  totalPages: Float!
+  unreadCount: Float!
+}
+
 type PaginatedUsersType {
   limit: Float!
   page: Float!
@@ -209,11 +372,29 @@ type Query {
   file(id: ID!): FileType!
   me: UserProfileType!
   myFiles(limit: Float = 20, page: Float = 1): PaginatedFilesType!
+  myNotifications(filters: NotificationFiltersInput): PaginatedNotificationsType!
+  notification(id: ID!): NotificationType_GQL!
+  notificationPreferences: NotificationPreferencesType!
+  notificationStats: NotificationStatsType!
   twoFactorStatus: TwoFactorStatusResponse!
   user(id: ID!): UserType!
   userAdmin(id: ID!): UserAdminType!
   users(filters: UsersFilterInput): PaginatedUsersType!
   whoAmI: UserInfo!
+}
+
+input QuietHoursInput {
+  enabled: Boolean!
+  endHour: Float!
+  startHour: Float!
+  timezone: String!
+}
+
+type QuietHoursType {
+  enabled: Boolean!
+  endHour: Float!
+  startHour: Float!
+  timezone: String!
 }
 
 input RefreshTokenInput {
@@ -248,6 +429,11 @@ input ResetPasswordInput {
   otpCode: String!
 }
 
+type Subscription {
+  newNotification: NotificationType_GQL!
+  notificationUpdated: String!
+}
+
 type TwoFactorSetupResponse {
   manualEntryKey: String!
   message: String!
@@ -262,8 +448,33 @@ type TwoFactorStatusResponse {
   hasBackupCodes: Boolean!
 }
 
+input TypePreferenceInput {
+  channels: [NotificationChannel!]!
+  enabled: Boolean!
+  type: NotificationType!
+}
+
+type TypePreferenceType {
+  channels: [NotificationChannel!]!
+  enabled: Boolean!
+  type: NotificationType!
+}
+
 input UpdateAddressInput {
   address: AddressInput!
+}
+
+input UpdateNotificationPreferencesInput {
+  digestFrequency: String
+  digestTime: String
+  doNotDisturb: Boolean
+  emailEnabled: Boolean
+  enableDigest: Boolean
+  enabled: Boolean
+  pushEnabled: Boolean
+  quietHours: QuietHoursInput
+  smsEnabled: Boolean
+  typePreferences: [TypePreferenceInput!]
 }
 
 input UpdateUserInput {

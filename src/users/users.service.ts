@@ -1,4 +1,4 @@
-// src/users/users.service.ts - UPDATED VERSION
+// src/users/users.service.ts
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   ConflictException,
