@@ -1,3 +1,5 @@
+// src/users/users.resolver.ts - IMPROVED VERSION
+
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
@@ -30,18 +32,20 @@ export class UsersResolver {
   constructor(private readonly usersService: UsersService) {}
 
   // ==========================================
-  // Public Queries
+  // PUBLIC QUERIES (Apply rate limiting)
   // ==========================================
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per minute
   @Query(() => UserType, { name: 'user' })
   async getUser(@Args('id', { type: () => ID }) id: string) {
     return this.usersService.findById(id);
   }
 
   // ==========================================
-  // Protected Queries
+  // PROTECTED QUERIES (Authenticated users)
   // ==========================================
 
+  @Throttle({ default: { limit: 30, ttl: 60000 } }) // 30 requests per minute for authenticated users
   @Query(() => UserProfileType, { name: 'me' })
   @UseGuards(GqlAuthGuard)
   async getMe(@CurrentUser() user: User) {
@@ -49,7 +53,7 @@ export class UsersResolver {
   }
 
   // ==========================================
-  // Admin Queries (Skip Throttling)
+  // ADMIN QUERIES (Skip throttling for admins)
   // ==========================================
 
   @SkipThrottle()
@@ -71,19 +75,20 @@ export class UsersResolver {
   }
 
   // ==========================================
-  // Public Mutations (Strict Throttling)
+  // PUBLIC MUTATIONS (STRICT rate limiting)
   // ==========================================
 
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 registrations per hour (prevent spam)
   @Mutation(() => UserProfileType)
   async createUser(@Args('input') input: CreateUserInput) {
     return this.usersService.create(input);
   }
 
   // ==========================================
-  // Protected Mutations
+  // PROTECTED MUTATIONS (Authenticated users)
   // ==========================================
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 updates per minute
   @Mutation(() => UserProfileType)
   @UseGuards(GqlAuthGuard)
   async updateUser(
@@ -93,6 +98,7 @@ export class UsersResolver {
     return this.usersService.update(user._id.toString(), input);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 address operations per minute
   @Mutation(() => UserProfileType)
   @UseGuards(GqlAuthGuard)
   async addAddress(
@@ -102,6 +108,7 @@ export class UsersResolver {
     return this.usersService.addAddress(user._id.toString(), input);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Mutation(() => UserProfileType)
   @UseGuards(GqlAuthGuard)
   async updateAddress(
@@ -116,6 +123,7 @@ export class UsersResolver {
     );
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Mutation(() => UserProfileType)
   @UseGuards(GqlAuthGuard)
   async deleteAddress(
@@ -125,6 +133,7 @@ export class UsersResolver {
     return this.usersService.deleteAddress(user._id.toString(), addressId);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Mutation(() => UserProfileType)
   @UseGuards(GqlAuthGuard)
   async setDefaultAddress(
@@ -134,6 +143,7 @@ export class UsersResolver {
     return this.usersService.setDefaultAddress(user._id.toString(), addressId);
   }
 
+  @Throttle({ default: { limit: 1, ttl: 86400000 } }) // 1 deletion per day (critical operation)
   @Mutation(() => UserProfileType)
   @UseGuards(GqlAuthGuard)
   async deleteUser(@CurrentUser() user: User) {
@@ -141,7 +151,7 @@ export class UsersResolver {
   }
 
   // ==========================================
-  // Admin Mutations (Skip Throttling)
+  // ADMIN MUTATIONS (Skip throttling, use audit logs)
   // ==========================================
 
   @SkipThrottle()
@@ -191,10 +201,6 @@ export class UsersResolver {
   ) {
     return this.usersService.unbanUser(userId, admin.role);
   }
-
-  // ==========================================
-  // Super Admin Only - Promote to Super Admin
-  // ==========================================
 
   @SkipThrottle()
   @Mutation(() => UserAdminType)

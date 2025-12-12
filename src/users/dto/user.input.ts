@@ -139,10 +139,13 @@ export class CreateUserInput {
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
   @MaxLength(128, { message: 'Password is too long' })
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, {
-    message:
-      'Password must contain at least one uppercase letter, one lowercase letter, one number and one special character (@$!%*?&)',
-  })
+  @Matches(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/,
+    {
+      message:
+        'Password must contain at least one uppercase letter, one lowercase letter, one number and one special character (@$!%*?&)',
+    },
+  )
   password: string;
 
   @Field(() => UserRole, { nullable: true })
@@ -360,7 +363,7 @@ export class InternalCreateUserInput extends CreateUserInput {
   githubId?: string;
 }
 
-// This is for internal use only (social login)
+// This is for internal use only
 // Not exported as GraphQL InputType
 export class InternalUpdateUserInput extends UpdateUserInput {
   isEmailVerified?: boolean;

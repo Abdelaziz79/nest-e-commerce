@@ -218,11 +218,6 @@ export class User extends Document {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-// Virtual for full name
-UserSchema.virtual('fullName').get(function (this: User) {
-  return `${this.firstName} ${this.lastName}`;
-});
-
 // Runtime Method Implementation
 UserSchema.methods.validatePassword = async function (
   password: string,

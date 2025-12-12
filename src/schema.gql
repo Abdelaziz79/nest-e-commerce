@@ -528,7 +528,6 @@ type UserAdminType {
   displayName: String
   email: String!
   firstName: String!
-  fullName: String!
   gender: String
   isActive: Boolean!
   isEmailVerified: Boolean!
@@ -567,7 +566,6 @@ type UserProfileType {
   displayName: String
   email: String!
   firstName: String!
-  fullName: String!
   gender: String
   isActive: Boolean!
   isEmailVerified: Boolean!
@@ -610,7 +608,6 @@ type UserType {
   createdAt: DateTime!
   displayName: String
   firstName: String!
-  fullName: String!
   lastName: String!
   role: UserRole!
   updatedAt: DateTime!

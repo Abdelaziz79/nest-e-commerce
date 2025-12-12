@@ -10,13 +10,13 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AppConfigService } from 'src/config/app.config.service';
 import { MailQueueService } from 'src/mail/mail-queue.service';
+import { NotificationHelperService } from 'src/notifications/notification-helper.service';
 import { CreateUserInput } from 'src/users/dto/user.input';
 import { User, UserStatus } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { OtpService } from './otp.service';
 import { OtpType } from './schemas/otp.schema';
 import { TwoFactorService } from './services/two-factor.service';
-import { NotificationHelperService } from 'src/notifications/notification-helper.service';
 
 @Injectable()
 export class AuthService {
@@ -184,6 +184,7 @@ export class AuthService {
 
     await this.otpService.verifyOtp(email, otpCode, OtpType.EMAIL_VERIFICATION);
 
+    //  Set status to ACTIVE when verifying email
     await this.usersService.update(user._id.toString(), {
       isEmailVerified: true,
       status: UserStatus.ACTIVE,
@@ -192,15 +193,20 @@ export class AuthService {
     const updatedUser = await this.usersService.findByEmail(email);
 
     // SEND NOTIFICATIONS
-    await Promise.all([
-      // Welcome notification
-      this.notificationHelper.notifyWelcome(updatedUser._id.toString(), {
-        firstName: updatedUser.firstName,
-        appName: this.appConfigService.appName,
-      }),
-      // Email verified notification
-      this.notificationHelper.notifyEmailVerified(updatedUser._id.toString()),
-    ]);
+    try {
+      await Promise.all([
+        // Welcome notification
+        this.notificationHelper.notifyWelcome(updatedUser._id.toString(), {
+          firstName: updatedUser.firstName,
+          appName: this.appConfigService.appName,
+        }),
+        // Email verified notification
+        this.notificationHelper.notifyEmailVerified(updatedUser._id.toString()),
+      ]);
+    } catch (notificationError) {
+      // Log the error but don't fail the verification
+      console.error('Failed to send notifications:', notificationError);
+    }
 
     const tokens = await this.generateTokens(updatedUser);
     await this.usersService.addRefreshToken(

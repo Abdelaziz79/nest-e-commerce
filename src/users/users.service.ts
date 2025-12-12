@@ -13,6 +13,8 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
 import type { Cache } from 'cache-manager';
 import { Connection, Model } from 'mongoose';
+import { createApiFeatures } from 'src/common/utils/api-features';
+import { NotificationHelperService } from 'src/notifications/notification-helper.service';
 import {
   AddAddressInput,
   BanUserInput,
@@ -28,21 +30,81 @@ import { User, UserRole, UserStatus } from './schemas/user.schema';
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
+  private readonly MAX_ADDRESSES = 10;
+  private readonly CACHE_TTL = 30000; // 30 seconds
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectConnection() private readonly connection: Connection,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly notificationHelper: NotificationHelperService,
   ) {}
 
   // =================================================================
-  // 1. Transactional Create (Register)
+  // PRIVATE HELPER METHODS
   // =================================================================
+
+  /**
+   * Invalidate user cache
+   */
+  private async invalidateUserCache(userId: string): Promise<void> {
+    await this.cacheManager.del(`user:${userId}`);
+  }
+
+  /**
+   * Find token index by comparing hashed tokens
+   */
+  private async findTokenIndex(
+    storedTokens: string[],
+    tokenToMatch: string,
+  ): Promise<number> {
+    for (let i = 0; i < storedTokens.length; i++) {
+      const isMatch = await bcrypt.compare(tokenToMatch, storedTokens[i]);
+      if (isMatch) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Check if admin has permission to modify target user
+   */
+  private async checkAdminPermission(
+    adminRole: UserRole,
+    targetUserId: string,
+  ): Promise<void> {
+    const targetUser = await this.userModel.findById(targetUserId);
+    if (!targetUser) throw new NotFoundException('Target user not found');
+
+    // Super admins can modify anyone EXCEPT other super admins
+    if (
+      adminRole === UserRole.SUPER_ADMIN &&
+      targetUser.role === UserRole.SUPER_ADMIN
+    ) {
+      throw new ForbiddenException(
+        'Super admins cannot modify other super admins',
+      );
+    }
+
+    // Regular admins can only modify customers
+    if (adminRole === UserRole.ADMIN) {
+      if (targetUser.role !== UserRole.CUSTOMER) {
+        throw new ForbiddenException(
+          'Admins can only modify customer accounts',
+        );
+      }
+    }
+  }
+
+  // =================================================================
+  // 1. TRANSACTIONAL CREATE (REGISTER)
+  // =================================================================
+
   async create(createUserInput: CreateUserInput): Promise<User> {
     const session = await this.connection.startSession();
     session.startTransaction();
 
     try {
+      // Check email uniqueness
       const existingUser = await this.userModel.findOne({
         email: createUserInput.email,
       });
@@ -50,6 +112,7 @@ export class UsersService {
         throw new ConflictException('Email already exists');
       }
 
+      // Check username uniqueness
       if (createUserInput.username) {
         const existingUsername = await this.userModel.findOne({
           username: createUserInput.username,
@@ -59,8 +122,10 @@ export class UsersService {
         }
       }
 
+      // Hash password
       const hashedPassword = await bcrypt.hash(createUserInput.password, 10);
 
+      // Create user
       const user = new this.userModel({
         ...createUserInput,
         password: hashedPassword,
@@ -68,6 +133,8 @@ export class UsersService {
 
       await user.save({ session });
       await session.commitTransaction();
+
+      this.logger.log(`User created: ${user.email} (${user._id})`);
       return user;
     } catch (error) {
       await session.abortTransaction();
@@ -97,7 +164,7 @@ export class UsersService {
     );
     if (!user) throw new NotFoundException('User not found');
 
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
     return user;
   }
 
@@ -109,7 +176,7 @@ export class UsersService {
     );
     if (!user) throw new NotFoundException('User not found');
 
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
     return user;
   }
 
@@ -126,6 +193,7 @@ export class UsersService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
+    // First, clean up expired tokens
     await this.userModel.findByIdAndUpdate(userId, {
       $pull: {
         refreshTokens: {
@@ -134,6 +202,7 @@ export class UsersService {
       },
     });
 
+    // Then add new token
     await this.userModel.findByIdAndUpdate(userId, {
       $push: {
         refreshTokens: {
@@ -154,23 +223,32 @@ export class UsersService {
     const user = await this.userModel.findById(userId).select('+refreshTokens');
     if (!user) throw new UnauthorizedException('User not found');
 
+    // Clean expired tokens
     user.refreshTokens = user.refreshTokens.filter(
       (rt) => rt.expiresAt > new Date(),
     );
 
+    // Find the old token
     const tokenIndex = await this.findTokenIndex(
       user.refreshTokens.map((rt) => rt.token),
       oldRefreshToken,
     );
 
+    // If old token is invalid, revoke all tokens (security measure)
     if (tokenIndex === -1) {
-      user.refreshTokens = [];
-      await user.save();
-      throw new UnauthorizedException('Invalid Refresh Token');
+      this.logger.warn(
+        `Invalid refresh token rotation attempt for user: ${userId}`,
+      );
+      await this.revokeAllRefreshTokens(userId);
+      throw new UnauthorizedException(
+        'Invalid Refresh Token - All tokens revoked',
+      );
     }
 
+    // Remove old token
     user.refreshTokens.splice(tokenIndex, 1);
 
+    // Add new token
     const hashedNewToken = await bcrypt.hash(newRefreshToken, 10);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
@@ -208,24 +286,14 @@ export class UsersService {
     });
   }
 
-  private async findTokenIndex(
-    storedTokens: string[],
-    tokenToMatch: string,
-  ): Promise<number> {
-    for (let i = 0; i < storedTokens.length; i++) {
-      const isMatch = await bcrypt.compare(tokenToMatch, storedTokens[i]);
-      if (isMatch) return i;
-    }
-    return -1;
-  }
-
   // =================================================================
-  // 4. READ OPERATIONS (Cached & Standard Mongoose)
+  // 4. READ OPERATIONS (CACHED & STANDARD)
   // =================================================================
 
   async findById(id: string): Promise<User> {
     const cacheKey = `user:${id}`;
     const cachedUser = await this.cacheManager.get<User>(cacheKey);
+
     if (cachedUser) {
       return cachedUser;
     }
@@ -236,7 +304,8 @@ export class UsersService {
       .exec();
 
     if (!user) throw new NotFoundException('User not found');
-    await this.cacheManager.set(cacheKey, user, 30000);
+
+    await this.cacheManager.set(cacheKey, user, this.CACHE_TTL);
     return user;
   }
 
@@ -250,35 +319,50 @@ export class UsersService {
       limit = 10,
     } = filters || {};
 
-    const maxLimit = Math.min(limit, 100);
-    const query: any = {};
+    // Build filter object
+    const filterObj: any = {};
+    if (role) filterObj.role = role;
+    if (status) filterObj.status = status;
+    if (isEmailVerified !== undefined)
+      filterObj.isEmailVerified = isEmailVerified;
 
-    if (search) {
-      query.$text = { $search: search };
-    }
+    // Create base query
+    const baseQuery = this.userModel.find().select('-password -refreshTokens');
 
-    if (role) query.role = role;
-    if (status) query.status = status;
-    if (isEmailVerified !== undefined) query.isEmailVerified = isEmailVerified;
+    // Use ApiFeatures class
+    const apiFeatures = createApiFeatures(baseQuery, {
+      search: {
+        searchTerm: search,
+        // Use text search (requires text index on schema)
+      },
+      filters: filterObj,
+      sort: {
+        defaultSort: search
+          ? { score: { $meta: 'textScore' } as any }
+          : { createdAt: -1 },
+      },
+      pagination: {
+        page,
+        limit,
+        maxLimit: 100,
+      },
+    });
 
-    const skip = (page - 1) * maxLimit;
-
-    const [users, total] = await Promise.all([
-      this.userModel
-        .find(query)
-        .skip(skip)
-        .limit(maxLimit)
-        .select('-password -refreshTokens')
-        .exec(),
-      this.userModel.countDocuments(query),
-    ]);
+    // Apply all features and execute
+    const result = await apiFeatures
+      .search()
+      .filter()
+      .sort()
+      .select()
+      .paginate()
+      .execute();
 
     return {
-      users,
-      total,
-      page,
-      limit: maxLimit,
-      totalPages: Math.ceil(total / maxLimit),
+      users: result.data,
+      total: result.pagination.total,
+      page: result.pagination.page,
+      limit: result.pagination.limit,
+      totalPages: result.pagination.totalPages,
     };
   }
 
@@ -289,7 +373,7 @@ export class UsersService {
   }
 
   // =================================================================
-  // 5. WRITE OPERATIONS (With Cache Invalidation)
+  // 5. WRITE OPERATIONS
   // =================================================================
 
   async update(
@@ -299,6 +383,7 @@ export class UsersService {
       status?: UserStatus;
     },
   ): Promise<User> {
+    // Check username uniqueness if updating username
     if (updateUserInput.username) {
       const existingUsername = await this.userModel.findOne({
         username: updateUserInput.username,
@@ -314,9 +399,10 @@ export class UsersService {
       { $set: updateUserInput },
       { new: true },
     );
+
     if (!user) throw new NotFoundException('User not found');
 
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
     return user;
   }
 
@@ -326,9 +412,10 @@ export class UsersService {
       { isActive: false },
       { new: true },
     );
+
     if (!user) throw new NotFoundException('User not found');
 
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
     return user;
   }
 
@@ -336,47 +423,13 @@ export class UsersService {
   // 6. ADMIN ACTIONS WITH PERMISSION CHECKS
   // =================================================================
 
-  /**
-   * Check if admin has permission to modify target user
-   * @param adminRole - Role of the admin performing the action
-   * @param targetUserId - ID of the user being modified
-   */
-  private async checkAdminPermission(
-    adminRole: UserRole,
-    targetUserId: string,
-  ): Promise<void> {
-    const targetUser = await this.userModel.findById(targetUserId);
-    if (!targetUser) throw new NotFoundException('Target user not found');
-
-    // Super admins can modify anyone EXCEPT other super admins (unless promoting)
-    if (
-      adminRole === UserRole.SUPER_ADMIN &&
-      targetUser.role === UserRole.SUPER_ADMIN
-    ) {
-      throw new ForbiddenException(
-        'Super admins cannot modify other super admins',
-      );
-    }
-
-    // Regular admins can only modify customers
-    if (adminRole === UserRole.ADMIN) {
-      if (targetUser.role !== UserRole.CUSTOMER) {
-        throw new ForbiddenException(
-          'Admins can only modify customer accounts',
-        );
-      }
-    }
-  }
-
   async updateRole(
     updateRoleInput: UpdateUserRoleInput,
     adminRole?: UserRole,
   ): Promise<User> {
-    // Check permissions if adminRole is provided
     if (adminRole) {
       await this.checkAdminPermission(adminRole, updateRoleInput.userId);
 
-      // Regular admins cannot promote users to admin or super admin
       if (adminRole === UserRole.ADMIN) {
         if (
           updateRoleInput.role === UserRole.ADMIN ||
@@ -388,8 +441,6 @@ export class UsersService {
         }
       }
 
-      // Super admins CAN promote to super admin (this is the change)
-      // But we'll handle it in a separate method with more security
       if (
         adminRole === UserRole.SUPER_ADMIN &&
         updateRoleInput.role === UserRole.SUPER_ADMIN
@@ -405,50 +456,51 @@ export class UsersService {
       { role: updateRoleInput.role },
       { new: true },
     );
+
     if (!user) throw new NotFoundException('User not found');
 
     this.logger.warn(
-      `User role updated: ${updateRoleInput.userId} -> ${updateRoleInput.role} by admin with role ${adminRole}`,
+      `User role updated: ${updateRoleInput.userId} -> ${updateRoleInput.role}`,
     );
 
-    await this.cacheManager.del(`user:${updateRoleInput.userId}`);
+    // SEND NOTIFICATION
+    await this.notificationHelper.notifyAccountSecurity(
+      updateRoleInput.userId,
+      {
+        message: `Your account role has been updated to ${updateRoleInput.role}.`,
+      },
+    );
+
+    await this.invalidateUserCache(updateRoleInput.userId);
     return user;
   }
 
-  /**
-   * Super Admin only - Promote user to Super Admin
-   * This is a separate, more secure method with additional logging
-   */
   async promoteToSuperAdmin(userId: string, promotedBy: string): Promise<User> {
-    // Check if target user exists
     const targetUser = await this.userModel.findById(userId);
     if (!targetUser) {
       throw new NotFoundException('Target user not found');
     }
 
-    // Cannot promote if already super admin
     if (targetUser.role === UserRole.SUPER_ADMIN) {
       throw new ConflictException('User is already a super admin');
     }
 
-    // Promote to super admin
     const user = await this.userModel.findByIdAndUpdate(
       userId,
       {
         role: UserRole.SUPER_ADMIN,
-        status: UserStatus.ACTIVE, // Ensure active status
+        status: UserStatus.ACTIVE,
       },
       { new: true },
     );
 
     if (!user) throw new NotFoundException('User not found');
 
-    // Log this critical action
     this.logger.warn(
       `🚨 CRITICAL: User ${userId} (${user.email}) promoted to SUPER_ADMIN by ${promotedBy}`,
     );
 
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
     return user;
   }
 
@@ -456,7 +508,6 @@ export class UsersService {
     updateStatusInput: UpdateUserStatusInput,
     adminRole?: UserRole,
   ): Promise<User> {
-    // Check permissions if adminRole is provided
     if (adminRole) {
       await this.checkAdminPermission(adminRole, updateStatusInput.userId);
     }
@@ -466,43 +517,72 @@ export class UsersService {
       { status: updateStatusInput.status },
       { new: true },
     );
+
     if (!user) throw new NotFoundException('User not found');
-    await this.cacheManager.del(`user:${updateStatusInput.userId}`);
+
+    // SEND NOTIFICATION based on status
+    if (updateStatusInput.status === UserStatus.SUSPENDED) {
+      await this.notificationHelper.notifyAccountSecurity(
+        updateStatusInput.userId,
+        {
+          message:
+            'Your account has been suspended. Contact support for more information.',
+        },
+      );
+    }
+
+    await this.invalidateUserCache(updateStatusInput.userId);
     return user;
   }
-
   async banUser(
     banInput: BanUserInput,
     bannedBy: string,
     adminRole?: UserRole,
   ): Promise<User> {
-    // Check permissions if adminRole is provided
-    if (adminRole) {
-      await this.checkAdminPermission(adminRole, banInput.userId);
+    const session = await this.connection.startSession();
+    session.startTransaction();
+
+    try {
+      if (adminRole) {
+        await this.checkAdminPermission(adminRole, banInput.userId);
+      }
+
+      const user = await this.userModel.findByIdAndUpdate(
+        banInput.userId,
+        {
+          status: UserStatus.BANNED,
+          banReason: banInput.reason,
+          bannedAt: new Date(),
+          bannedBy,
+          refreshTokens: [],
+        },
+        { new: true, session },
+      );
+
+      if (!user) throw new NotFoundException('User not found');
+
+      await session.commitTransaction();
+
+      this.logger.warn(
+        `User banned: ${banInput.userId} - Reason: ${banInput.reason}`,
+      );
+
+      // SEND NOTIFICATION
+      await this.notificationHelper.notifyAccountSecurity(banInput.userId, {
+        message: `Your account has been banned. Reason: ${banInput.reason}. Contact support if you believe this is a mistake.`,
+      });
+
+      await this.invalidateUserCache(banInput.userId);
+      return user;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
     }
-
-    const user = await this.userModel.findByIdAndUpdate(
-      banInput.userId,
-      {
-        status: UserStatus.BANNED,
-        banReason: banInput.reason,
-        bannedAt: new Date(),
-        bannedBy,
-      },
-      { new: true },
-    );
-    if (!user) throw new NotFoundException('User not found');
-
-    this.logger.warn(
-      `User banned: ${banInput.userId} - Reason: ${banInput.reason} - By: ${bannedBy}`,
-    );
-
-    await this.cacheManager.del(`user:${banInput.userId}`);
-    return user;
   }
 
   async unbanUser(userId: string, adminRole?: UserRole): Promise<User> {
-    // Check permissions if adminRole is provided
     if (adminRole) {
       await this.checkAdminPermission(adminRole, userId);
     }
@@ -517,11 +597,18 @@ export class UsersService {
       },
       { new: true },
     );
+
     if (!user) throw new NotFoundException('User not found');
 
     this.logger.log(`User unbanned: ${userId}`);
 
-    await this.cacheManager.del(`user:${userId}`);
+    // SEND NOTIFICATION
+    await this.notificationHelper.notifyAccountSecurity(userId, {
+      message:
+        'Your account has been unbanned. You can now access all features.',
+    });
+
+    await this.invalidateUserCache(userId);
     return user;
   }
 
@@ -533,19 +620,28 @@ export class UsersService {
     const user = await this.userModel.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 
+    // Check address limit
+    if (user.addresses.length >= this.MAX_ADDRESSES) {
+      throw new ConflictException(
+        `Maximum ${this.MAX_ADDRESSES} addresses allowed`,
+      );
+    }
+
+    // If new address is default, unset other defaults
     if (addressInput.address.isDefault) {
       await this.userModel.updateOne(
         { _id: userId },
         { $set: { 'addresses.$[].isDefault': false } },
       );
     }
+
     const updatedUser = await this.userModel.findByIdAndUpdate(
       userId,
       { $push: { addresses: addressInput.address } },
       { new: true },
     );
 
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
     return updatedUser;
   }
 
@@ -554,6 +650,7 @@ export class UsersService {
     addressId: string,
     updateAddressInput: UpdateAddressInput,
   ): Promise<User> {
+    // If updating to default, unset other defaults first
     if (updateAddressInput.address.isDefault) {
       await this.userModel.updateOne(
         { _id: userId },
@@ -561,6 +658,7 @@ export class UsersService {
       );
     }
 
+    // Build update fields
     const updateFields: any = {};
     for (const [key, value] of Object.entries(updateAddressInput.address)) {
       updateFields[`addresses.$.${key}`] = value;
@@ -571,9 +669,10 @@ export class UsersService {
       { $set: updateFields },
       { new: true },
     );
+
     if (!user) throw new NotFoundException('User or address not found');
 
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
     return user;
   }
 
@@ -583,23 +682,30 @@ export class UsersService {
       { $pull: { addresses: { _id: addressId } } },
       { new: true },
     );
+
     if (!user) throw new NotFoundException('User not found');
-    await this.cacheManager.del(`user:${userId}`);
+
+    await this.invalidateUserCache(userId);
     return user;
   }
 
   async setDefaultAddress(userId: string, addressId: string): Promise<User> {
+    // First, unset all defaults
     await this.userModel.updateOne(
       { _id: userId },
       { $set: { 'addresses.$[].isDefault': false } },
     );
+
+    // Then set the specified address as default
     const user = await this.userModel.findOneAndUpdate(
       { _id: userId, 'addresses._id': addressId },
       { $set: { 'addresses.$.isDefault': true } },
       { new: true },
     );
+
     if (!user) throw new NotFoundException('User or address not found');
-    await this.cacheManager.del(`user:${userId}`);
+
+    await this.invalidateUserCache(userId);
     return user;
   }
 
@@ -617,17 +723,26 @@ export class UsersService {
   async incrementLoginAttempts(email: string): Promise<void> {
     const user = await this.userModel.findOne({ email });
     if (!user) return;
+
     const updates: any = { $inc: { loginAttempts: 1 } };
+
+    // Lock account after 5 failed attempts
     if (user.loginAttempts >= 4) {
-      updates.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+      updates.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
     }
+
     await this.userModel.findByIdAndUpdate(user._id, updates);
   }
 
   async isAccountLocked(email: string): Promise<boolean> {
     const user = await this.userModel.findOne({ email });
     if (!user) return false;
-    if (user.lockUntil && user.lockUntil > new Date()) return true;
+
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      return true;
+    }
+
+    // If lock expired, reset attempts
     if (user.lockUntil && user.lockUntil <= new Date()) {
       await this.userModel.findByIdAndUpdate(user._id, {
         loginAttempts: 0,
@@ -635,6 +750,7 @@ export class UsersService {
       });
       return false;
     }
+
     return false;
   }
 
@@ -678,7 +794,7 @@ export class UsersService {
       passwordResetExpires: null,
     });
 
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
   }
 
   // =================================================================
@@ -705,7 +821,7 @@ export class UsersService {
     await this.userModel.findByIdAndUpdate(userId, {
       twoFactorSecret: secret,
     });
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
   }
 
   async enableTwoFactor(userId: string): Promise<void> {
@@ -713,7 +829,7 @@ export class UsersService {
       twoFactorEnabled: true,
       twoFactorEnabledAt: new Date(),
     });
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
   }
 
   async disableTwoFactor(userId: string): Promise<void> {
@@ -724,7 +840,7 @@ export class UsersService {
       twoFactorEnabledAt: null,
       twoFactorBackupCodesUsed: 0,
     });
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
   }
 
   async updateBackupCodes(
@@ -735,7 +851,7 @@ export class UsersService {
       twoFactorBackupCodes: hashedCodes,
       twoFactorBackupCodesUsed: 0,
     });
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
   }
 
   async removeBackupCode(userId: string, index: number): Promise<void> {
@@ -743,6 +859,6 @@ export class UsersService {
     user.twoFactorBackupCodes.splice(index, 1);
     user.twoFactorBackupCodesUsed += 1;
     await user.save();
-    await this.cacheManager.del(`user:${userId}`);
+    await this.invalidateUserCache(userId);
   }
 }

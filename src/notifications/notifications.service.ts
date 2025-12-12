@@ -516,6 +516,7 @@ export class NotificationsService {
       .exec();
 
     if (!preferences) {
+      // FIX: Use findOneAndUpdate with upsert to handle race conditions
       preferences = (await this.createDefaultPreferences(userId)) as any;
     }
 
@@ -530,17 +531,7 @@ export class NotificationsService {
     userId: string,
     input: UpdateNotificationPreferencesInput,
   ): Promise<NotificationPreferences> {
-    let preferences = await this.preferencesModel
-      .findOne({
-        userId: new Types.ObjectId(userId),
-      })
-      .exec();
-
-    if (!preferences) {
-      preferences = (await this.createDefaultPreferences(userId)) as any;
-    }
-
-    // FIX: Use $set operator to update only provided fields
+    // FIX: Use findOneAndUpdate with upsert to ensure preferences exist
     const updateFields: any = {};
 
     // Only include fields that are actually provided
@@ -564,15 +555,19 @@ export class NotificationsService {
     if (input.doNotDisturb !== undefined)
       updateFields.doNotDisturb = input.doNotDisturb;
 
-    // Update the document using findByIdAndUpdate with $set
+    // Update the document using findOneAndUpdate with upsert
     const updatedPreferences = await this.preferencesModel.findOneAndUpdate(
       { userId: new Types.ObjectId(userId) },
       { $set: updateFields },
-      { new: true, runValidators: false }, // Don't run validators on partial update
+      {
+        new: true,
+        runValidators: false,
+        upsert: true, // Create if doesn't exist
+      },
     );
 
     if (!updatedPreferences) {
-      throw new NotFoundException('Preferences not found');
+      throw new NotFoundException('Failed to update preferences');
     }
 
     await this.cacheManager.del(`notification_prefs:${userId}`);
@@ -591,18 +586,44 @@ export class NotificationsService {
       enabled: true,
     }));
 
-    const prefs = await this.preferencesModel.create({
-      userId: new Types.ObjectId(userId),
-      enabled: true,
-      emailEnabled: true,
-      pushEnabled: true,
-      smsEnabled: false,
-      enableDigest: false,
-      doNotDisturb: false,
-      typePreferences: defaultPreferences,
-    });
+    try {
+      // Use findOneAndUpdate with upsert to avoid duplicate key errors
+      const prefs = await this.preferencesModel.findOneAndUpdate(
+        { userId: new Types.ObjectId(userId) },
+        {
+          $setOnInsert: {
+            userId: new Types.ObjectId(userId),
+            enabled: true,
+            emailEnabled: true,
+            pushEnabled: true,
+            smsEnabled: false,
+            enableDigest: false,
+            doNotDisturb: false,
+            typePreferences: defaultPreferences,
+          },
+        },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true,
+        },
+      );
 
-    return prefs;
+      this.logger.log(`Default preferences created for user: ${userId}`);
+      return prefs as NotificationPreferences;
+    } catch (error) {
+      // If duplicate key error still occurs, fetch existing preferences
+      if (error.code === 11000) {
+        this.logger.warn(
+          `Duplicate preferences detected for user ${userId}, fetching existing`,
+        );
+        const existing = await this.preferencesModel.findOne({
+          userId: new Types.ObjectId(userId),
+        });
+        if (existing) return existing;
+      }
+      throw error;
+    }
   }
 
   // ==========================================
