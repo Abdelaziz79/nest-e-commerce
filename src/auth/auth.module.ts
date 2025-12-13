@@ -1,4 +1,5 @@
 // src/auth/auth.module.ts
+
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -6,6 +7,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AppConfigModule } from 'src/config/app.config.module';
 import { AppConfigService } from 'src/config/app.config.service';
 import { MailModule } from 'src/mail/mail.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthResolver } from './auth.resolver';
@@ -16,7 +18,6 @@ import { TwoFactorService } from './services/two-factor.service';
 import { GithubStrategy } from './strategies/github.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [

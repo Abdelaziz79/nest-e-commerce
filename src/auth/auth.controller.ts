@@ -2,6 +2,7 @@
 
 import { Controller, Get, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Request } from 'express';
 import { AppConfigService } from 'src/config/app.config.service';
 import { AuthService } from './auth.service';
 
@@ -13,30 +14,28 @@ export class AuthController {
   ) {}
 
   // ==========================================
-  // GOOGLE
+  // GOOGLE OAUTH
   // ==========================================
 
   @Get('google')
   @UseGuards(AuthGuard('google'))
   async googleAuth() {
-    // Guards initiates the redirect to Google
+    // Initiates redirect to Google
   }
 
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleAuthRedirect(@Req() req, @Res() res) {
-    // 1. Generate Tokens for the user returned from strategy
     const tokens = await this.authService.generateTokens(req.user);
 
-    // 2. Add Refresh Token to DB
     await this.authService['usersService'].addRefreshToken(
       req.user._id.toString(),
       tokens.refreshToken,
+      'Google OAuth',
     );
 
-    // 3. Check if frontend is available, otherwise show success page
     if (this.configService.isDevelopment) {
-      // In development, show tokens directly
+      // Development: Show tokens on page
       res.send(`
         <!DOCTYPE html>
         <html>
@@ -69,21 +68,40 @@ export class AuthController {
         </html>
       `);
     } else {
-      // In production, redirect to frontend
-      res.redirect(
-        `${this.configService.frontendUrl}/social-login?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`,
-      );
+      // Production: Use HTTP-Only cookies + secure redirect
+      const isProduction = this.configService.environment === 'production';
+
+      // Set HTTP-Only cookies (more secure than URL params)
+      res.cookie('accessToken', tokens.accessToken, {
+        httpOnly: true,
+        secure: isProduction, // HTTPS only in production
+        sameSite: 'strict',
+        maxAge: 15 * 60 * 1000, // 15 minutes
+        path: '/',
+      });
+
+      res.cookie('refreshToken', tokens.refreshToken, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/',
+      });
+
+      // Redirect to frontend success page
+      // Frontend will read tokens from cookies via API call
+      res.redirect(`${this.configService.frontendUrl}/auth/success`);
     }
   }
 
   // ==========================================
-  // GITHUB
+  // GITHUB OAUTH
   // ==========================================
 
   @Get('github')
   @UseGuards(AuthGuard('github'))
   async githubAuth() {
-    // Guards initiates the redirect to GitHub
+    // Initiates redirect to GitHub
   }
 
   @Get('github/callback')
@@ -94,6 +112,7 @@ export class AuthController {
     await this.authService['usersService'].addRefreshToken(
       req.user._id.toString(),
       tokens.refreshToken,
+      'GitHub OAuth',
     );
 
     if (this.configService.isDevelopment) {
@@ -129,10 +148,66 @@ export class AuthController {
         </html>
       `);
     } else {
-      res.redirect(
-        `${this.configService.frontendUrl}/social-login?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}`,
-      );
+      const isProduction = this.configService.environment === 'production';
+
+      res.cookie('accessToken', tokens.accessToken, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict',
+        maxAge: 15 * 60 * 1000,
+        path: '/',
+      });
+
+      res.cookie('refreshToken', tokens.refreshToken, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
+      });
+
+      res.redirect(`${this.configService.frontendUrl}/auth/success`);
     }
+  }
+
+  // ==========================================
+  // TOKEN RETRIEVAL (for frontend after OAuth)
+  // ==========================================
+
+  /**
+   * Frontend calls this after OAuth redirect to get tokens from cookies
+   * Then stores them in localStorage/memory
+   */
+  @Get('tokens')
+  @UseGuards(AuthGuard('jwt'))
+  async getTokens(@Req() req: Request & { user: any }, @Res() res) {
+    const accessToken = req.cookies?.accessToken;
+    const refreshToken = req.cookies?.refreshToken;
+
+    if (!accessToken || !refreshToken) {
+      return res.status(401).json({
+        success: false,
+        message: 'No tokens found',
+      });
+    }
+
+    // Clear cookies after reading
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+
+    // Return tokens to frontend
+    res.json({
+      success: true,
+      accessToken,
+      refreshToken,
+      user: {
+        id: req.user.id,
+        email: req.user.email,
+        firstName: req.user.firstName,
+        lastName: req.user.lastName,
+        role: req.user.role,
+      },
+    });
   }
 
   // ==========================================
@@ -142,12 +217,12 @@ export class AuthController {
   @Get('google/callback/test')
   @UseGuards(AuthGuard('google'))
   async googleAuthTest(@Req() req) {
-    // Return JSON instead of redirect for testing
     const tokens = await this.authService.generateTokens(req.user);
 
     await this.authService['usersService'].addRefreshToken(
       req.user._id.toString(),
       tokens.refreshToken,
+      'Google OAuth Test',
     );
 
     return {
@@ -166,12 +241,12 @@ export class AuthController {
   @Get('github/callback/test')
   @UseGuards(AuthGuard('github'))
   async githubAuthTest(@Req() req) {
-    // Return JSON instead of redirect for testing
     const tokens = await this.authService.generateTokens(req.user);
 
     await this.authService['usersService'].addRefreshToken(
       req.user._id.toString(),
       tokens.refreshToken,
+      'GitHub OAuth Test',
     );
 
     return {
@@ -188,7 +263,7 @@ export class AuthController {
   }
 
   // ==========================================
-  // STATUS CHECK ENDPOINT
+  // STATUS CHECK
   // ==========================================
 
   @Get('status')

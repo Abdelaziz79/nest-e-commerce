@@ -1,7 +1,7 @@
+// src/auth/services/two-factor.service.ts
+
 import {
   BadRequestException,
-  forwardRef,
-  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -12,25 +12,24 @@ import * as QRCode from 'qrcode';
 import * as speakeasy from 'speakeasy';
 import { AppConfigService } from 'src/config/app.config.service';
 import { UsersService } from 'src/users/users.service';
-import { AuthService } from '../auth.service';
+import { JwtPayload } from '../strategies/jwt.strategy';
 
+/**
+ * TWO-FACTOR AUTHENTICATION SERVICE
+ * NO CIRCULAR DEPENDENCY - Uses JwtService directly
+ */
 @Injectable()
 export class TwoFactorService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: AppConfigService,
     private readonly usersService: UsersService,
-    @Inject(forwardRef(() => AuthService))
-    private readonly authService: AuthService,
   ) {}
 
   // ==========================================
   // SETUP 2FA
   // ==========================================
 
-  /**
-   * Initiate 2FA setup (with password verification)
-   */
   async initiate2FASetup(
     userId: string,
     email: string,
@@ -41,7 +40,6 @@ export class TwoFactorService {
     manualEntryKey: string;
     message: string;
   }> {
-    // Verify password before initiating setup
     const user = await this.usersService.findByEmail(email);
     const isPasswordValid = await user.validatePassword(password);
 
@@ -49,27 +47,20 @@ export class TwoFactorService {
       throw new UnauthorizedException('Invalid password');
     }
 
-    // Generate 2FA secret and QR code
     return this.generateTwoFactorSecret(userId);
   }
 
-  /**
-   * Generate 2FA secret and QR code for setup
-   */
   private async generateTwoFactorSecret(userId: string) {
     const user = await this.usersService.findById(userId);
 
-    // Generate secret
     const secret = speakeasy.generateSecret({
       name: `${this.configService.appName} (${user.email})`,
       issuer: this.configService.appName,
       length: 32,
     });
 
-    // Generate QR code
     const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url!);
 
-    // Store secret temporarily (not enabled yet until verified)
     await this.usersService.updateTwoFactorSecret(userId, secret.base32);
 
     return {
@@ -81,9 +72,6 @@ export class TwoFactorService {
     };
   }
 
-  /**
-   * Verify 2FA setup token and enable 2FA
-   */
   async verifyAndEnableTwoFactor(
     userId: string,
     token: string,
@@ -96,59 +84,96 @@ export class TwoFactorService {
       );
     }
 
-    // Verify the token
     const isValid = speakeasy.totp.verify({
       secret: user.twoFactorSecret,
       encoding: 'base32',
       token,
-      window: 2, // Allow 2 time steps before/after (60 seconds)
+      window: 2,
     });
 
     if (!isValid) {
       throw new UnauthorizedException('Invalid verification code');
     }
 
-    // Enable 2FA
     await this.usersService.enableTwoFactor(userId);
 
     return true;
   }
 
   // ==========================================
-  // LOGIN WITH 2FA
+  // LOGIN WITH 2FA - NO CIRCULAR DEPENDENCY
   // ==========================================
 
-  /**
-   * Verify 2FA token during login (complete flow)
-   */
   async verify2FALogin(
     email: string,
     token: string,
     tempToken: string,
   ): Promise<any> {
-    // Verify temporary token
     const userId = await this.verifyTempToken(tempToken);
 
-    // Verify user email matches
     const user = await this.usersService.findByEmail(email);
     if (user._id.toString() !== userId) {
       throw new UnauthorizedException('Invalid request');
     }
 
-    // Verify 2FA token
     const isValid = await this.verifyTwoFactorToken(userId, token);
 
     if (!isValid) {
       throw new UnauthorizedException('Invalid 2FA code');
     }
 
-    // Complete login and generate tokens
-    return this.authService.complete2FALogin(userId);
+    // Generate tokens directly here (no circular dependency)
+    return this.complete2FALoginInternal(userId);
   }
 
   /**
-   * Verify 2FA token during login
+   * Complete 2FA login WITHOUT calling AuthService
+   * Generates tokens directly to avoid circular dependency
    */
+  private async complete2FALoginInternal(userId: string) {
+    const user = await this.usersService.findById(userId);
+
+    await this.usersService.updateLastLogin(userId);
+
+    // Build rich JWT payload
+    const payload: JwtPayload = {
+      sub: user._id.toString(),
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      isActive: user.isActive,
+      isEmailVerified: user.isEmailVerified,
+      twoFactorEnabled: user.twoFactorEnabled,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    };
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(payload, {
+        secret: this.configService.jwtSecret,
+        expiresIn: this.configService.jwtExpiration,
+      }),
+      this.jwtService.signAsync(payload, {
+        secret: this.configService.jwtRefreshSecret,
+        expiresIn: this.configService.jwtRefreshExpiration,
+      }),
+    ]);
+
+    await this.usersService.addRefreshToken(userId, refreshToken, '2FA Login');
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      },
+    };
+  }
+
   async verifyTwoFactorToken(userId: string, token: string): Promise<boolean> {
     const user = await this.usersService.findByIdWithTwoFactorSecret(userId);
 
@@ -170,16 +195,12 @@ export class TwoFactorService {
   // DISABLE 2FA
   // ==========================================
 
-  /**
-   * Disable 2FA (requires password and 2FA token)
-   */
   async disable2FA(
     userId: string,
     email: string,
     password: string,
     token: string,
   ): Promise<boolean> {
-    // Verify password
     const user = await this.usersService.findByEmail(email);
     const isPasswordValid = await user.validatePassword(password);
 
@@ -187,7 +208,6 @@ export class TwoFactorService {
       throw new UnauthorizedException('Invalid password');
     }
 
-    // Verify 2FA token
     const isValid = await this.verifyTwoFactorToken(userId, token);
 
     if (!isValid) {
@@ -202,15 +222,11 @@ export class TwoFactorService {
   // BACKUP CODES
   // ==========================================
 
-  /**
-   * Generate backup codes with password verification
-   */
   async generateBackupCodesWithVerification(
     userId: string,
     email: string,
     password: string,
   ): Promise<{ codes: string[]; message: string }> {
-    // Verify password
     const user = await this.usersService.findByEmail(email);
     const isPasswordValid = await user.validatePassword(password);
 
@@ -231,56 +247,41 @@ export class TwoFactorService {
     };
   }
 
-  /**
-   * Generate backup codes
-   */
   private async generateBackupCodes(userId: string): Promise<string[]> {
     const codes: string[] = [];
     const hashedCodes: string[] = [];
 
-    // Generate 10 backup codes
     for (let i = 0; i < 10; i++) {
       const code = this.generateBackupCode();
       codes.push(code);
 
-      // Hash the code before storing
       const hashedCode = await bcrypt.hash(code, 10);
       hashedCodes.push(hashedCode);
     }
 
-    // Store hashed codes
     await this.usersService.updateBackupCodes(userId, hashedCodes);
 
     return codes;
   }
 
-  /**
-   * Use backup code for login
-   */
   async use2FABackupCode(
     email: string,
     backupCode: string,
     tempToken: string,
   ): Promise<any> {
-    // Verify temporary token
     const userId = await this.verifyTempToken(tempToken);
 
-    // Verify user email matches
     const user = await this.usersService.findByEmail(email);
     if (user._id.toString() !== userId) {
       throw new UnauthorizedException('Invalid request');
     }
 
-    // Verify backup code
     await this.verifyBackupCode(userId, backupCode);
 
-    // Complete login and generate tokens
-    return this.authService.complete2FALogin(userId);
+    // Generate tokens directly (no circular dependency)
+    return this.complete2FALoginInternal(userId);
   }
 
-  /**
-   * Verify backup code
-   */
   private async verifyBackupCode(
     userId: string,
     code: string,
@@ -291,12 +292,10 @@ export class TwoFactorService {
       throw new BadRequestException('No backup codes available');
     }
 
-    // Try to match against stored hashed codes
     for (let i = 0; i < user.twoFactorBackupCodes.length; i++) {
       const isMatch = await bcrypt.compare(code, user.twoFactorBackupCodes[i]);
 
       if (isMatch) {
-        // Remove used backup code
         await this.usersService.removeBackupCode(userId, i);
         return true;
       }
@@ -309,9 +308,6 @@ export class TwoFactorService {
   // TEMPORARY TOKENS
   // ==========================================
 
-  /**
-   * Generate temporary token for 2FA flow
-   */
   async generateTempToken(userId: string): Promise<string> {
     return this.jwtService.signAsync(
       {
@@ -320,14 +316,11 @@ export class TwoFactorService {
       },
       {
         secret: this.configService.jwtSecret,
-        expiresIn: '5m', // 5 minutes to complete 2FA
+        expiresIn: '5m',
       },
     );
   }
 
-  /**
-   * Verify temporary token
-   */
   async verifyTempToken(token: string): Promise<string> {
     try {
       const payload = await this.jwtService.verifyAsync(token, {
@@ -348,9 +341,6 @@ export class TwoFactorService {
   // STATUS & HELPERS
   // ==========================================
 
-  /**
-   * Get 2FA status for user
-   */
   async getTwoFactorStatus(userId: string) {
     const user = await this.usersService.findByIdWithBackupCodes(userId);
 
@@ -363,9 +353,6 @@ export class TwoFactorService {
     };
   }
 
-  /**
-   * Generate a random backup code
-   */
   private generateBackupCode(): string {
     const code = crypto.randomBytes(4).toString('hex').toUpperCase();
     return `${code.slice(0, 4)}-${code.slice(4, 8)}`;

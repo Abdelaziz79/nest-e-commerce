@@ -32,6 +32,8 @@ export class UsersService {
   private readonly logger = new Logger(UsersService.name);
   private readonly MAX_ADDRESSES = 10;
   private readonly CACHE_TTL = 30000; // 30 seconds
+  private readonly CACHE_USER_PREFIX = 'user:';
+  private readonly CACHE_JWT_PREFIX = 'jwt_user:';
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
@@ -45,10 +47,22 @@ export class UsersService {
   // =================================================================
 
   /**
-   * Invalidate user cache
+   * Invalidate ALL user-related caches
+   * Call this whenever user data changes
    */
   private async invalidateUserCache(userId: string): Promise<void> {
-    await this.cacheManager.del(`user:${userId}`);
+    await Promise.all([
+      this.cacheManager.del(`${this.CACHE_USER_PREFIX}${userId}`),
+      this.cacheManager.del(`${this.CACHE_JWT_PREFIX}${userId}`),
+    ]);
+  }
+
+  /**
+   * Invalidate JWT cache specifically
+   * Call this for critical security changes (ban, suspend, deactivate, role change)
+   */
+  private async invalidateJwtCache(userId: string): Promise<void> {
+    await this.cacheManager.del(`${this.CACHE_JWT_PREFIX}${userId}`);
   }
 
   /**
@@ -93,6 +107,46 @@ export class UsersService {
         );
       }
     }
+  }
+
+  // ==========================================
+  // OPTIMIZED QUERIES FOR JWT VALIDATION
+  // ==========================================
+
+  /**
+   * MINIMAL USER QUERY FOR JWT VALIDATION
+   * Only fetches fields needed for security checks
+   * Used by JwtStrategy on EVERY authenticated request
+   *
+   * This is FAST because:
+   * 1. Only selects 5 fields (no joins, no large fields)
+   * 2. Uses indexed _id lookup
+   * 3. Lean query (plain JS object, not Mongoose document)
+   */
+  async findByIdMinimal(userId: string): Promise<{
+    _id: string;
+    isActive: boolean;
+    status: UserStatus;
+    role: UserRole;
+    isEmailVerified: boolean;
+    twoFactorEnabled: boolean;
+    firstName: string;
+    lastName: string;
+  } | null> {
+    const user = await this.userModel
+      .findById(userId)
+      .select(
+        'isActive status role isEmailVerified twoFactorEnabled firstName lastName',
+      )
+      .lean() // Returns plain JS object (faster than Mongoose document)
+      .exec();
+
+    if (!user) return null;
+
+    return {
+      ...user,
+      _id: user._id.toString(),
+    };
   }
 
   // =================================================================
@@ -184,16 +238,30 @@ export class UsersService {
   // 3. TOKEN MANAGEMENT
   // =================================================================
 
+  /**
+   * Find user with refresh tokens (for device tracking)
+   */
+  async findByIdWithRefreshTokens(userId: string): Promise<User> {
+    const user = await this.userModel.findById(userId).select('+refreshTokens');
+
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  /**
+   * Add refresh token with device information
+   */
   async addRefreshToken(
     userId: string,
     refreshToken: string,
+    deviceInfo: string = 'Unknown Device',
     expiresIn: string = '7d',
   ): Promise<void> {
     const hashedToken = await bcrypt.hash(refreshToken, 10);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    // First, clean up expired tokens
+    // Clean up expired tokens first
     await this.userModel.findByIdAndUpdate(userId, {
       $pull: {
         refreshTokens: {
@@ -202,14 +270,14 @@ export class UsersService {
       },
     });
 
-    // Then add new token
+    // Add new token with device info
     await this.userModel.findByIdAndUpdate(userId, {
       $push: {
         refreshTokens: {
           token: hashedToken,
           createdAt: new Date(),
           expiresAt,
-          deviceInfo: 'web',
+          deviceInfo,
         },
       },
     });
@@ -290,8 +358,13 @@ export class UsersService {
   // 4. READ OPERATIONS (CACHED & STANDARD)
   // =================================================================
 
+  /**
+   * CACHED FULL USER QUERY
+   * Used when you need complete user data
+   * Uses Redis cache with 30s TTL
+   */
   async findById(id: string): Promise<User> {
-    const cacheKey = `user:${id}`;
+    const cacheKey = `${this.CACHE_USER_PREFIX}${id}`;
     const cachedUser = await this.cacheManager.get<User>(cacheKey);
 
     if (cachedUser) {
@@ -305,7 +378,7 @@ export class UsersService {
 
     if (!user) throw new NotFoundException('User not found');
 
-    await this.cacheManager.set(cacheKey, user, this.CACHE_TTL);
+    await this.cacheManager.set(cacheKey, user.toObject(), this.CACHE_TTL);
     return user;
   }
 
@@ -376,6 +449,9 @@ export class UsersService {
   // 5. WRITE OPERATIONS
   // =================================================================
 
+  /**
+   * Update user with appropriate cache invalidation
+   */
   async update(
     userId: string,
     updateUserInput: UpdateUserInput & {
@@ -383,7 +459,7 @@ export class UsersService {
       status?: UserStatus;
     },
   ): Promise<User> {
-    // Check username uniqueness if updating username
+    // Check username uniqueness if updating
     if (updateUserInput.username) {
       const existingUsername = await this.userModel.findOne({
         username: updateUserInput.username,
@@ -402,10 +478,18 @@ export class UsersService {
 
     if (!user) throw new NotFoundException('User not found');
 
+    // CRITICAL: Invalidate JWT cache if status changed
+    if (updateUserInput.status) {
+      await this.invalidateJwtCache(userId);
+    }
+
     await this.invalidateUserCache(userId);
     return user;
   }
 
+  /**
+   * Deactivate account with cache invalidation
+   */
   async delete(userId: string): Promise<User> {
     const user = await this.userModel.findByIdAndUpdate(
       userId,
@@ -415,7 +499,10 @@ export class UsersService {
 
     if (!user) throw new NotFoundException('User not found');
 
+    // CRITICAL: Invalidate JWT cache so deactivation takes effect
+    await this.invalidateJwtCache(userId);
     await this.invalidateUserCache(userId);
+
     return user;
   }
 
@@ -423,6 +510,9 @@ export class UsersService {
   // 6. ADMIN ACTIONS WITH PERMISSION CHECKS
   // =================================================================
 
+  /**
+   * Update role with immediate cache invalidation
+   */
   async updateRole(
     updateRoleInput: UpdateUserRoleInput,
     adminRole?: UserRole,
@@ -463,7 +553,11 @@ export class UsersService {
       `User role updated: ${updateRoleInput.userId} -> ${updateRoleInput.role}`,
     );
 
-    // SEND NOTIFICATION
+    // CRITICAL: Immediately invalidate JWT cache so role change takes effect
+    await this.invalidateJwtCache(updateRoleInput.userId);
+    await this.invalidateUserCache(updateRoleInput.userId);
+
+    // Send notification
     await this.notificationHelper.notifyAccountSecurity(
       updateRoleInput.userId,
       {
@@ -471,7 +565,6 @@ export class UsersService {
       },
     );
 
-    await this.invalidateUserCache(updateRoleInput.userId);
     return user;
   }
 
@@ -504,6 +597,9 @@ export class UsersService {
     return user;
   }
 
+  /**
+   * Update status with immediate cache invalidation
+   */
   async updateStatus(
     updateStatusInput: UpdateUserStatusInput,
     adminRole?: UserRole,
@@ -520,7 +616,11 @@ export class UsersService {
 
     if (!user) throw new NotFoundException('User not found');
 
-    // SEND NOTIFICATION based on status
+    // CRITICAL: Immediately invalidate JWT cache so status change takes effect
+    await this.invalidateJwtCache(updateStatusInput.userId);
+    await this.invalidateUserCache(updateStatusInput.userId);
+
+    // Send notification based on status
     if (updateStatusInput.status === UserStatus.SUSPENDED) {
       await this.notificationHelper.notifyAccountSecurity(
         updateStatusInput.userId,
@@ -531,9 +631,12 @@ export class UsersService {
       );
     }
 
-    await this.invalidateUserCache(updateStatusInput.userId);
     return user;
   }
+
+  /**
+   * Ban user with immediate cache invalidation
+   */
   async banUser(
     banInput: BanUserInput,
     bannedBy: string,
@@ -554,7 +657,7 @@ export class UsersService {
           banReason: banInput.reason,
           bannedAt: new Date(),
           bannedBy,
-          refreshTokens: [],
+          refreshTokens: [], // Revoke all refresh tokens
         },
         { new: true, session },
       );
@@ -567,12 +670,15 @@ export class UsersService {
         `User banned: ${banInput.userId} - Reason: ${banInput.reason}`,
       );
 
-      // SEND NOTIFICATION
+      // CRITICAL: Immediately invalidate JWT cache so ban takes effect
+      await this.invalidateJwtCache(banInput.userId);
+      await this.invalidateUserCache(banInput.userId);
+
+      // Send notification
       await this.notificationHelper.notifyAccountSecurity(banInput.userId, {
         message: `Your account has been banned. Reason: ${banInput.reason}. Contact support if you believe this is a mistake.`,
       });
 
-      await this.invalidateUserCache(banInput.userId);
       return user;
     } catch (error) {
       await session.abortTransaction();
@@ -582,6 +688,9 @@ export class UsersService {
     }
   }
 
+  /**
+   * Unban user with cache invalidation
+   */
   async unbanUser(userId: string, adminRole?: UserRole): Promise<User> {
     if (adminRole) {
       await this.checkAdminPermission(adminRole, userId);
@@ -602,13 +711,16 @@ export class UsersService {
 
     this.logger.log(`User unbanned: ${userId}`);
 
-    // SEND NOTIFICATION
+    // CRITICAL: Invalidate JWT cache so unban takes effect
+    await this.invalidateJwtCache(userId);
+    await this.invalidateUserCache(userId);
+
+    // Send notification
     await this.notificationHelper.notifyAccountSecurity(userId, {
       message:
         'Your account has been unbanned. You can now access all features.',
     });
 
-    await this.invalidateUserCache(userId);
     return user;
   }
 
@@ -787,6 +899,9 @@ export class UsersService {
     return user;
   }
 
+  /**
+   * Update password with full cache invalidation
+   */
   async updatePassword(userId: string, hashedPassword: string): Promise<void> {
     await this.userModel.findByIdAndUpdate(userId, {
       password: hashedPassword,
@@ -794,6 +909,8 @@ export class UsersService {
       passwordResetExpires: null,
     });
 
+    // Invalidate ALL caches on password change
+    await this.invalidateJwtCache(userId);
     await this.invalidateUserCache(userId);
   }
 
@@ -824,14 +941,23 @@ export class UsersService {
     await this.invalidateUserCache(userId);
   }
 
+  /**
+   * Enable 2FA with cache invalidation
+   */
   async enableTwoFactor(userId: string): Promise<void> {
     await this.userModel.findByIdAndUpdate(userId, {
       twoFactorEnabled: true,
       twoFactorEnabledAt: new Date(),
     });
+
+    // Invalidate JWT cache so 2FA status is reflected
+    await this.invalidateJwtCache(userId);
     await this.invalidateUserCache(userId);
   }
 
+  /**
+   * Disable 2FA with cache invalidation
+   */
   async disableTwoFactor(userId: string): Promise<void> {
     await this.userModel.findByIdAndUpdate(userId, {
       twoFactorEnabled: false,
@@ -840,6 +966,9 @@ export class UsersService {
       twoFactorEnabledAt: null,
       twoFactorBackupCodesUsed: 0,
     });
+
+    // Invalidate JWT cache so 2FA status is reflected
+    await this.invalidateJwtCache(userId);
     await this.invalidateUserCache(userId);
   }
 

@@ -17,6 +17,12 @@ import { UsersService } from '../users/users.service';
 import { OtpService } from './otp.service';
 import { OtpType } from './schemas/otp.schema';
 import { TwoFactorService } from './services/two-factor.service';
+import { JwtPayload } from './strategies/jwt.strategy';
+
+interface DeviceInfo {
+  userAgent?: string;
+  ip?: string;
+}
 
 @Injectable()
 export class AuthService {
@@ -31,14 +37,25 @@ export class AuthService {
   ) {}
 
   // ===============================================
-  // JWT & SESSION MANAGEMENT
+  // JWT & SESSION MANAGEMENT - OPTIMIZED
   // ===============================================
 
-  async generateTokens(user: User) {
-    const payload = {
+  /**
+   * Generate JWT tokens with FULL user data embedded
+   * No database lookup needed during validation
+   */
+  async generateTokens(user: User, deviceInfo?: DeviceInfo) {
+    // Build rich JWT payload with all necessary user data
+    const payload: JwtPayload = {
       sub: user._id.toString(),
       email: user.email,
       role: user.role,
+      status: user.status,
+      isActive: user.isActive,
+      isEmailVerified: user.isEmailVerified,
+      twoFactorEnabled: user.twoFactorEnabled,
+      firstName: user.firstName,
+      lastName: user.lastName,
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -65,11 +82,61 @@ export class AuthService {
     };
   }
 
+  /**
+   * Parse user agent to detect device type
+   */
+  private parseUserAgent(userAgent?: string): string {
+    if (!userAgent) return 'Unknown Device';
+
+    const ua = userAgent.toLowerCase();
+
+    // Mobile devices
+    if (
+      ua.includes('mobile') ||
+      ua.includes('android') ||
+      ua.includes('iphone')
+    ) {
+      if (ua.includes('chrome')) return 'Mobile Chrome';
+      if (ua.includes('safari')) return 'Mobile Safari';
+      if (ua.includes('firefox')) return 'Mobile Firefox';
+      return 'Mobile Browser';
+    }
+
+    // Desktop browsers
+    if (ua.includes('chrome')) return 'Chrome Desktop';
+    if (ua.includes('firefox')) return 'Firefox Desktop';
+    if (ua.includes('safari') && !ua.includes('chrome'))
+      return 'Safari Desktop';
+    if (ua.includes('edge')) return 'Edge Desktop';
+
+    return 'Unknown Browser';
+  }
+
+  /**
+   * Check if this is a new device login
+   */
+  private async isNewDevice(
+    userId: string,
+    deviceInfo?: DeviceInfo,
+  ): Promise<boolean> {
+    if (!deviceInfo?.userAgent) return false;
+
+    const parsedDevice = this.parseUserAgent(deviceInfo.userAgent);
+    const user = await this.usersService.findByIdWithRefreshTokens(userId);
+
+    // Check if we've seen this device before
+    const existingDevice = user.refreshTokens?.some(
+      (rt) => rt.deviceInfo === parsedDevice,
+    );
+
+    return !existingDevice;
+  }
+
   // ===============================================
-  // SIMPLE LOGIN (EMAIL + PASSWORD)
+  // LOGIN WITH ENHANCED SECURITY
   // ===============================================
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, deviceInfo?: DeviceInfo) {
     const isLocked = await this.usersService.isAccountLocked(email);
     if (isLocked) {
       throw new UnauthorizedException(
@@ -87,9 +154,28 @@ export class AuthService {
       throw new UnauthorizedException(`Account is banned: ${user.banReason}`);
     }
 
+    // FIX: Allow login even if email not verified, but send verification email
     if (!user.isEmailVerified) {
+      // Generate new OTP
+      const otpCode = await this.otpService.generateOtp(
+        email,
+        OtpType.EMAIL_VERIFICATION,
+        {
+          userId: user._id.toString(),
+          ipAddress: deviceInfo?.ip,
+          userAgent: deviceInfo?.userAgent,
+        },
+      );
+
+      // Send verification email
+      await this.mailQueueService.sendEmailVerificationOtp(
+        email,
+        user.firstName,
+        otpCode,
+      );
+
       throw new UnauthorizedException(
-        'Please verify your email before logging in.',
+        'Please verify your email. A new verification code has been sent.',
       );
     }
 
@@ -109,9 +195,32 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Check for new device login
+    const isNewDeviceLogin = await this.isNewDevice(
+      user._id.toString(),
+      deviceInfo,
+    );
+    if (isNewDeviceLogin && deviceInfo) {
+      const parsedDevice = this.parseUserAgent(deviceInfo.userAgent);
+      await this.mailQueueService.sendGenericEmail(
+        user.email,
+        'New Device Login Detected',
+        `
+          <h2>New Login Detected</h2>
+          <p>Hi ${user.firstName},</p>
+          <p>We detected a login to your account from a new device:</p>
+          <ul>
+            <li><strong>Device:</strong> ${parsedDevice}</li>
+            <li><strong>IP Address:</strong> ${deviceInfo.ip || 'Unknown'}</li>
+            <li><strong>Time:</strong> ${new Date().toLocaleString()}</li>
+          </ul>
+          <p>If this wasn't you, please change your password immediately.</p>
+        `,
+      );
+    }
+
     // Check if 2FA is enabled
     if (user.twoFactorEnabled) {
-      // Generate temporary token for 2FA flow
       const tempToken = await this.twoFactorService.generateTempToken(
         user._id.toString(),
       );
@@ -129,10 +238,14 @@ export class AuthService {
     // No 2FA required - complete login
     await this.usersService.updateLastLogin(user._id.toString());
 
-    const tokens = await this.generateTokens(user);
+    const tokens = await this.generateTokens(user, deviceInfo);
+
+    // Store refresh token with device info
+    const parsedDevice = this.parseUserAgent(deviceInfo?.userAgent);
     await this.usersService.addRefreshToken(
       user._id.toString(),
       tokens.refreshToken,
+      parsedDevice,
     );
 
     return {
@@ -142,6 +255,7 @@ export class AuthService {
       message: null,
     };
   }
+
   // ===============================================
   // REGISTER WITH EMAIL VERIFICATION
   // ===============================================
@@ -184,7 +298,6 @@ export class AuthService {
 
     await this.otpService.verifyOtp(email, otpCode, OtpType.EMAIL_VERIFICATION);
 
-    //  Set status to ACTIVE when verifying email
     await this.usersService.update(user._id.toString(), {
       isEmailVerified: true,
       status: UserStatus.ACTIVE,
@@ -192,19 +305,15 @@ export class AuthService {
 
     const updatedUser = await this.usersService.findByEmail(email);
 
-    // SEND NOTIFICATIONS
     try {
       await Promise.all([
-        // Welcome notification
         this.notificationHelper.notifyWelcome(updatedUser._id.toString(), {
           firstName: updatedUser.firstName,
           appName: this.appConfigService.appName,
         }),
-        // Email verified notification
         this.notificationHelper.notifyEmailVerified(updatedUser._id.toString()),
       ]);
     } catch (notificationError) {
-      // Log the error but don't fail the verification
       console.error('Failed to send notifications:', notificationError);
     }
 
@@ -212,6 +321,7 @@ export class AuthService {
     await this.usersService.addRefreshToken(
       updatedUser._id.toString(),
       tokens.refreshToken,
+      'Web (Email Verification)',
     );
 
     return tokens;
@@ -266,6 +376,7 @@ export class AuthService {
         hashedPassword,
       );
 
+      // CRITICAL: Revoke ALL tokens on password reset
       await this.usersService.revokeAllRefreshTokens(user._id.toString());
 
       await Promise.all([
@@ -273,7 +384,6 @@ export class AuthService {
           user.email,
           user.firstName,
         ),
-        // SEND NOTIFICATION
         this.notificationHelper.notifyPasswordChanged(user._id.toString()),
       ]);
 
@@ -309,7 +419,6 @@ export class AuthService {
 
       return true;
     } catch (error) {
-      // If it's a BadRequestException (already verified), re-throw it
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -418,7 +527,7 @@ export class AuthService {
       password: randomPassword,
       avatar: details.picture,
       isEmailVerified: true,
-      status: UserStatus.ACTIVE, // Social login users are active immediately
+      status: UserStatus.ACTIVE,
     } as any);
 
     if (details.provider === 'google') {
@@ -442,17 +551,17 @@ export class AuthService {
   // HELPER FUNCTIONS
   // ===============================================
 
-  /**
-   * Complete 2FA login and generate tokens
-   * This is called after 2FA verification is complete
-   */
   async complete2FALogin(userId: string) {
     const user = await this.usersService.findById(userId);
 
     await this.usersService.updateLastLogin(userId);
 
     const tokens = await this.generateTokens(user as any);
-    await this.usersService.addRefreshToken(userId, tokens.refreshToken);
+    await this.usersService.addRefreshToken(
+      userId,
+      tokens.refreshToken,
+      '2FA Login',
+    );
 
     return tokens;
   }

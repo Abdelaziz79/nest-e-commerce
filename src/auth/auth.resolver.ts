@@ -1,3 +1,5 @@
+// src/auth/auth.resolver.ts - UPDATED LOGIN MUTATION
+
 import { UseGuards } from '@nestjs/common';
 import { Args, Context, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Throttle } from '@nestjs/throttler';
@@ -38,13 +40,19 @@ export class AuthResolver {
   ) {}
 
   // ==========================================
-  // SIMPLE LOGIN (EMAIL + PASSWORD)
+  // LOGIN WITH DEVICE INFO
   // ==========================================
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Mutation(() => AuthPayload)
-  async login(@Args('input') input: LoginInput) {
-    return this.authService.login(input.email, input.password);
+  async login(@Args('input') input: LoginInput, @Context() context: any) {
+    // Extract device info from request
+    const deviceInfo = {
+      userAgent: context.req?.get('user-agent'),
+      ip: context.req?.ip,
+    };
+
+    return this.authService.login(input.email, input.password, deviceInfo);
   }
 
   // ==========================================
@@ -139,7 +147,7 @@ export class AuthResolver {
   @UseGuards(GqlAuthGuard)
   async whoAmI(@CurrentUser() user: User) {
     return {
-      id: user._id.toString(),
+      id: user._id?.toString() || user.id,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
@@ -154,7 +162,9 @@ export class AuthResolver {
   @Query(() => TwoFactorStatusResponse)
   @UseGuards(GqlAuthGuard)
   async twoFactorStatus(@CurrentUser() user: User) {
-    return this.twoFactorService.getTwoFactorStatus(user._id.toString());
+    return this.twoFactorService.getTwoFactorStatus(
+      user._id?.toString() || user.id,
+    );
   }
 
   @Mutation(() => TwoFactorSetupResponse)
@@ -164,7 +174,7 @@ export class AuthResolver {
     @Args('input') input: Enable2FAInput,
   ) {
     return this.twoFactorService.initiate2FASetup(
-      user._id.toString(),
+      user._id?.toString() || user.id,
       user.email,
       input.password,
     );
@@ -177,7 +187,7 @@ export class AuthResolver {
     @Args('input') input: Verify2FASetupInput,
   ) {
     return this.twoFactorService.verifyAndEnableTwoFactor(
-      user._id.toString(),
+      user._id?.toString() || user.id,
       input.token,
     );
   }
@@ -199,7 +209,7 @@ export class AuthResolver {
     @Args('input') input: Disable2FAInput,
   ) {
     return this.twoFactorService.disable2FA(
-      user._id.toString(),
+      user._id?.toString() || user.id,
       user.email,
       input.password,
       input.token,
@@ -213,7 +223,7 @@ export class AuthResolver {
     @Args('input') input: Generate2FABackupCodesInput,
   ) {
     return this.twoFactorService.generateBackupCodesWithVerification(
-      user._id.toString(),
+      user._id?.toString() || user.id,
       user.email,
       input.password,
     );
